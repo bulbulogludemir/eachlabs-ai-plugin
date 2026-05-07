@@ -1,0 +1,30 @@
+{
+  "name": "eachlabs-ai",
+  "owner": {
+    "name": "Demir Bulbuloglu"
+  },
+  "description": "Claude Code plugins for each::labs generative media APIs and MCP tools.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "eachlabs-ai",
+      "source": "./plugins/eachlabs-ai",
+      "description": "Build with each::labs generative media APIs, workflows, each::sense, docs, and MCP tools.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Eachlabs"
+      },
+      "homepage": "https://docs.eachlabs.ai/",
+      "repository": "https://github.com/bulbulogludemir/eachlabs-ai-plugin",
+      "license": "MIT",
+      "category": "AI",
+      "tags": [
+        "mcp",
+        "generative-media",
+        "image-generation",
+        "video-generation",
+        "workflows"
+      ]
+    }
+  ]
+}

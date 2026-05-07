@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" role="img" aria-label="each::labs logo">
+  <rect width="320" height="96" rx="18" fill="#111827"/>
+  <circle cx="48" cy="38" r="13" fill="#38BDF8"/>
+  <circle cx="82" cy="38" r="13" fill="#A78BFA"/>
+  <path d="M41 65c11 8 38 8 49 0" fill="none" stroke="#F8FAFC" stroke-width="7" stroke-linecap="round"/>
+  <text x="122" y="58" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">each::labs</text>
+</svg>

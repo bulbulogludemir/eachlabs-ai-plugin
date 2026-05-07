@@ -1,0 +1,20 @@
+{
+  "name": "eachlabs-ai",
+  "interface": {
+    "displayName": "each::labs"
+  },
+  "plugins": [
+    {
+      "name": "eachlabs-ai",
+      "source": {
+        "source": "local",
+        "path": "./plugins/eachlabs-ai"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Coding"
+    }
+  ]
+}

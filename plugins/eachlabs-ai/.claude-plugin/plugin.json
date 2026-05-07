@@ -1,0 +1,32 @@
+{
+  "name": "eachlabs-ai",
+  "version": "0.1.0",
+  "description": "Build with each::labs generative media APIs, workflows, each::sense, docs, and MCP tools.",
+  "author": {
+    "name": "Eachlabs",
+    "url": "https://www.eachlabs.ai/"
+  },
+  "homepage": "https://docs.eachlabs.ai/",
+  "repository": "https://github.com/bulbulogludemir/eachlabs-ai-plugin",
+  "license": "MIT",
+  "keywords": [
+    "eachlabs",
+    "mcp",
+    "claude-code",
+    "generative-media",
+    "image-generation",
+    "video-generation",
+    "workflows"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.claude-mcp.json",
+  "userConfig": {
+    "each_api_key": {
+      "type": "string",
+      "title": "Eachlabs API key",
+      "description": "API key for authenticated each::labs model, prediction, workflow, each::sense, and LLM Router actions.",
+      "sensitive": true,
+      "required": false
+    }
+  }
+}

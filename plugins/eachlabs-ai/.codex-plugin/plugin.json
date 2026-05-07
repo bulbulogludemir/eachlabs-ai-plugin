@@ -1,0 +1,46 @@
+{
+  "name": "eachlabs-ai",
+  "version": "0.1.0",
+  "description": "Build with each::labs generative media APIs, workflows, each::sense, and the official docs MCP.",
+  "author": {
+    "name": "Eachlabs",
+    "url": "https://www.eachlabs.ai/"
+  },
+  "homepage": "https://docs.eachlabs.ai/",
+  "repository": "https://github.com/bulbulogludemir/eachlabs-ai-plugin",
+  "license": "MIT",
+  "keywords": [
+    "eachlabs",
+    "generative-media",
+    "image-generation",
+    "video-generation",
+    "audio-generation",
+    "workflows",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "each::labs",
+    "shortDescription": "Generative media APIs, workflows, and docs MCP",
+    "longDescription": "Use each::labs in Codex to integrate image, video, audio, 3D, LLM routing, and multi-step workflow generation. The plugin packages focused implementation guidance plus the official each::labs documentation MCP for current API lookup.",
+    "developerName": "Eachlabs",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://www.eachlabs.ai/",
+    "privacyPolicyURL": "https://www.eachlabs.ai/privacy-policy",
+    "termsOfServiceURL": "https://www.eachlabs.ai/terms-of-service",
+    "defaultPrompt": [
+      "Build an each::labs media generation flow",
+      "Find the best each::labs model for this prompt",
+      "Wire each::sense into this agent"
+    ],
+    "brandColor": "#111827",
+    "composerIcon": "./assets/eachlabs-icon.png",
+    "logo": "./assets/eachlabs-logo.png",
+    "screenshots": []
+  }
+}

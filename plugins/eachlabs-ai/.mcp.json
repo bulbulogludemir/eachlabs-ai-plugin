@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "eachlabs": {
+      "command": "node",
+      "args": [
+        "./mcp/dist/index.js"
+      ],
+      "env": {
+        "EACH_API_KEY": "$EACH_API_KEY"
+      },
+      "note": "Bundled each::labs MCP. Includes official docs proxy tools plus action tools for model discovery, schemas, predictions, workflows, each::sense, and the LLM Router. Requires EACH_API_KEY in the runtime environment for account actions."
+    }
+  }
+}

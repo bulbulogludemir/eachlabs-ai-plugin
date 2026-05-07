@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "eachlabs": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp/dist/index.js"
+      ],
+      "env": {
+        "EACH_API_KEY": "${user_config.each_api_key}"
+      }
+    }
+  }
+}

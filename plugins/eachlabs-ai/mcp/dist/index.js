@@ -23311,13 +23311,24 @@ var StreamableHTTPClientTransport = class {
 };
 
 // src/index.ts
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 var EACH_API_BASE_URL = process.env.EACH_API_BASE_URL ?? "https://api.eachlabs.ai";
 var EACH_WORKFLOWS_BASE_URL = process.env.EACH_WORKFLOWS_BASE_URL ?? "https://workflows.eachlabs.run/api/v1";
 var EACH_SENSE_BASE_URL = process.env.EACH_SENSE_BASE_URL ?? "https://eachsense-agent.core.eachlabs.run";
 var EACH_SENSE_V1_BASE_URL = process.env.EACH_SENSE_V1_BASE_URL ?? `${EACH_SENSE_BASE_URL}/v1`;
 var EACH_DOCS_MCP_URL = process.env.EACH_DOCS_MCP_URL ?? "https://docs.eachlabs.ai/mcp";
 var EACH_API_KEY = process.env.EACH_API_KEY ?? process.env.EACHLABS_API_KEY;
+var DEFAULT_TIMEOUT_MS = 6e4;
+var MODEL_CACHE_TTL_MS = 5 * 60 * 1e3;
+var MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+var MAX_EMBED_IMAGE_BYTES = 3 * 1024 * 1024;
+var MAX_MEDIA_BLOCKS = 8;
+var UPDATE_CHECK_URL = "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
+var SERVER_VERSION = "0.3.0";
+var PREDICTION_TERMINAL_STATUSES = ["success", "failed", "cancelled"];
+var WORKFLOW_TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
 var EachlabsError = class extends Error {
   constructor(message, status, payload) {
     super(message);
@@ -23353,33 +23364,75 @@ function text(value) {
     ]
   };
 }
+function errorText(value) {
+  return { ...text(value), isError: true };
+}
 function passthroughMcpResult(value) {
   if (value && typeof value === "object" && "content" in value && Array.isArray(value.content)) {
     return value;
   }
   return text(value);
 }
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function joinUrl(baseUrl, path) {
+  const base = baseUrl.replace(/\/+$/, "");
+  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+}
 async function eachRequest(path, options = {}) {
-  const baseUrl = options.baseUrl ?? EACH_API_BASE_URL;
-  const url2 = new URL(path, baseUrl);
+  const url2 = new URL(joinUrl(options.baseUrl ?? EACH_API_BASE_URL, path));
   const headers = new Headers(options.headers);
   if (options.auth !== false) {
-    headers.set("X-API-Key", requireApiKey());
+    if (options.bearer) {
+      headers.set("Authorization", `Bearer ${requireApiKey()}`);
+    } else {
+      headers.set("X-API-Key", requireApiKey());
+    }
   }
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(url2, { ...options, headers });
-  const contentType = response.headers.get("content-type") ?? "";
-  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
-  if (!response.ok) {
-    throw new EachlabsError(
-      `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
-      response.status,
-      payload
-    );
+  const method = (options.method ?? "GET").toUpperCase();
+  const maxAttempts = (options.retries ?? 2) + 1;
+  for (let attempt = 1; ; attempt++) {
+    let response;
+    try {
+      response = await fetch(url2, {
+        ...options,
+        headers,
+        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+      });
+    } catch (error2) {
+      if (attempt >= maxAttempts) {
+        throw new EachlabsError(
+          `Request to ${url2.pathname} failed: ${error2 instanceof Error ? error2.message : String(error2)}`
+        );
+      }
+      await sleep(2 ** attempt * 1e3);
+      continue;
+    }
+    const contentType = response.headers.get("content-type") ?? "";
+    const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+    if (!response.ok) {
+      const retryable = response.status === 429 || response.status >= 500 && method === "GET";
+      if (retryable && attempt < maxAttempts) {
+        const retryAfter = Number(response.headers.get("retry-after"));
+        const delaySeconds = Math.min(
+          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 2 ** attempt,
+          10
+        );
+        await sleep(delaySeconds * 1e3);
+        continue;
+      }
+      throw new EachlabsError(
+        `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
+        response.status,
+        payload
+      );
+    }
+    return payload;
   }
-  return payload;
 }
 function appendQuery(path, params) {
   const url2 = new URL(path, "https://placeholder.local");
@@ -23504,18 +23557,40 @@ function validateAgainstSchema(schema, input) {
     warnings
   };
 }
+var modelCache;
 async function getAllModels(maxModels) {
-  const pageSize = Math.min(100, maxModels);
+  const cached2 = modelCache;
+  if (cached2 && Date.now() - cached2.fetchedAt < MODEL_CACHE_TTL_MS && (cached2.complete || cached2.models.length >= maxModels)) {
+    return cached2.models.slice(0, maxModels);
+  }
+  const pageSize = 100;
   const models = [];
+  let complete = false;
   for (let offset = 0; models.length < maxModels; offset += pageSize) {
     const page = await eachRequest(appendQuery("/v1/models", { limit: pageSize, offset }), {
       auth: false
     });
-    if (!Array.isArray(page) || page.length === 0) break;
+    if (!Array.isArray(page) || page.length === 0) {
+      complete = true;
+      break;
+    }
     models.push(...page);
-    if (page.length < pageSize) break;
+    if (page.length < pageSize) {
+      complete = true;
+      break;
+    }
   }
+  modelCache = { models, complete, fetchedAt: Date.now() };
   return models.slice(0, maxModels);
+}
+function trimModel(model) {
+  return {
+    title: model.title,
+    slug: model.slug,
+    version: model.version,
+    output_type: model.output_type,
+    request_fields: Object.keys(schemaProperties(getRequestSchema(model)))
+  };
 }
 function scoreModel(model, terms, requiredFields, outputType) {
   const title = String(model.title ?? "").toLowerCase();
@@ -23544,7 +23619,7 @@ async function getModelBySlug(slug) {
   return eachRequest(appendQuery("/v1/model", { slug }));
 }
 async function callOfficialDocsTool(name, args) {
-  const client = new Client({ name: "eachlabs-unofficial-docs-proxy", version: "0.1.0" });
+  const client = new Client({ name: "eachlabs-unofficial-docs-proxy", version: "0.2.0" });
   const transport = new StreamableHTTPClientTransport(new URL(EACH_DOCS_MCP_URL));
   try {
     await client.connect(transport);
@@ -23553,60 +23628,316 @@ async function callOfficialDocsTool(name, args) {
     await client.close().catch(() => void 0);
   }
 }
-var server = new McpServer({
-  name: "eachlabs-mcp",
-  version: "0.1.0"
-});
-server.tool(
+var IMAGE_MIME_BY_EXTENSION = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif"
+};
+var MEDIA_MIME_BY_EXTENSION = {
+  ...IMAGE_MIME_BY_EXTENSION,
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  flac: "audio/flac",
+  m4a: "audio/mp4"
+};
+function urlExtension(url2) {
+  try {
+    const pathname = new URL(url2).pathname;
+    const dot = pathname.lastIndexOf(".");
+    return dot === -1 ? "" : pathname.slice(dot + 1).toLowerCase();
+  } catch {
+    return "";
+  }
+}
+function collectMediaUrls(value, found = []) {
+  if (typeof value === "string") {
+    if (/^https?:\/\//.test(value) && MEDIA_MIME_BY_EXTENSION[urlExtension(value)]) {
+      found.push(value);
+    }
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectMediaUrls(item, found);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) collectMediaUrls(item, found);
+  }
+  return found;
+}
+async function mediaContentBlocks(output, embedImages) {
+  const urls = [...new Set(collectMediaUrls(output))].slice(0, MAX_MEDIA_BLOCKS);
+  const blocks = [];
+  for (const url2 of urls) {
+    const extension = urlExtension(url2);
+    const imageMime = IMAGE_MIME_BY_EXTENSION[extension];
+    if (imageMime && embedImages) {
+      try {
+        const response = await fetch(url2, { signal: AbortSignal.timeout(15e3) });
+        const declaredLength = Number(response.headers.get("content-length"));
+        if (response.ok && (!Number.isFinite(declaredLength) || declaredLength <= MAX_EMBED_IMAGE_BYTES)) {
+          const buffer = Buffer.from(await response.arrayBuffer());
+          if (buffer.byteLength <= MAX_EMBED_IMAGE_BYTES) {
+            blocks.push({ type: "image", data: buffer.toString("base64"), mimeType: imageMime });
+            continue;
+          }
+        }
+      } catch {
+      }
+    }
+    blocks.push({
+      type: "resource_link",
+      uri: url2,
+      name: decodeURIComponent(url2.split("/").pop() ?? url2).split("?")[0],
+      mimeType: MEDIA_MIME_BY_EXTENSION[extension]
+    });
+  }
+  return blocks;
+}
+async function predictionToolResult(value, prediction, includeMedia, embedImages) {
+  const base = text(value);
+  if (!includeMedia || !prediction) return base;
+  const status = String(prediction.status ?? "").toLowerCase();
+  if (status !== "success") return base;
+  const media = await mediaContentBlocks(prediction.output, embedImages);
+  return media.length > 0 ? { content: [...base.content, ...media] } : base;
+}
+async function pollUntilDone(fetchCurrent, terminalStatuses, timeoutSeconds, pollIntervalSeconds, extra) {
+  const deadline = Date.now() + timeoutSeconds * 1e3;
+  let last;
+  while (Date.now() <= deadline) {
+    if (extra?.signal?.aborted) break;
+    last = await fetchCurrent();
+    const status = String(last.status ?? "").toLowerCase();
+    if (terminalStatuses.includes(status)) {
+      return { completed: true, last };
+    }
+    const progressToken = extra?._meta?.progressToken;
+    if (progressToken !== void 0 && extra?.sendNotification) {
+      const elapsedSeconds = Math.round(timeoutSeconds - (deadline - Date.now()) / 1e3);
+      await extra.sendNotification({
+        method: "notifications/progress",
+        params: { progressToken, progress: elapsedSeconds, total: timeoutSeconds, message: status }
+      }).catch(() => void 0);
+    }
+    await sleep(pollIntervalSeconds * 1e3);
+  }
+  return { completed: false, last };
+}
+async function eachRequestStreaming(path, options, extra) {
+  const url2 = new URL(joinUrl(options.baseUrl, path));
+  const headers = new Headers({
+    "X-API-Key": requireApiKey(),
+    "Content-Type": "application/json",
+    Accept: "text/event-stream, application/json"
+  });
+  const response = await fetch(url2, {
+    method: "POST",
+    headers,
+    body: options.body,
+    signal: AbortSignal.timeout(options.timeoutMs ?? 3e5)
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok) {
+    const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+    throw new EachlabsError(
+      `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
+      response.status,
+      payload
+    );
+  }
+  if (!contentType.includes("text/event-stream") || !response.body) {
+    return contentType.includes("application/json") ? response.json() : response.text();
+  }
+  const progressToken = extra?._meta?.progressToken;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let textOut = "";
+  let eventCount = 0;
+  const events = [];
+  const handleData = async (data) => {
+    if (data === "[DONE]") return;
+    let event;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      events.push(data);
+      return;
+    }
+    eventCount++;
+    const record2 = event;
+    const delta = record2?.choices?.[0]?.delta;
+    if (typeof delta?.content === "string") textOut += delta.content;
+    const extension = record2?.eachlabs ?? record2?.choices?.[0]?.delta?.eachlabs;
+    const extensionType = String(extension?.type ?? record2?.type ?? "");
+    const isDeltaChunk = typeof delta?.content === "string" || extensionType.includes("delta");
+    if (!isDeltaChunk && events.length < 100) {
+      events.push(extension ?? event);
+    }
+    if (progressToken !== void 0 && extra?.sendNotification && !isDeltaChunk) {
+      await extra.sendNotification({
+        method: "notifications/progress",
+        params: {
+          progressToken,
+          progress: eventCount,
+          message: extensionType || "streaming"
+        }
+      }).catch(() => void 0);
+    }
+  };
+  while (true) {
+    if (extra?.signal?.aborted) {
+      await reader.cancel().catch(() => void 0);
+      break;
+    }
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline;
+    while ((newline = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line.startsWith("data:")) {
+        await handleData(line.slice(5).trim());
+      }
+    }
+  }
+  return {
+    streamed: true,
+    text: textOut || void 0,
+    events,
+    event_count: eventCount
+  };
+}
+var server = new McpServer(
+  {
+    name: "eachlabs-mcp",
+    version: SERVER_VERSION
+  },
+  {
+    instructions: [
+      "Unofficial MCP server for the each::labs platform (models, predictions, workflows, each::sense, LLM router).",
+      "Typical model-run flow: eachlabs_search_models -> eachlabs_get_model_request_schema -> eachlabs_create_prediction (mode 'wait' for short jobs, 'async' + eachlabs_get_prediction for long ones).",
+      "Media inputs must be URLs; upload local files first with eachlabs_upload_file.",
+      "Requires EACH_API_KEY (or EACHLABS_API_KEY) in the environment for everything except the public model catalog and docs search."
+    ].join("\n")
+  }
+);
+var readOnly = { readOnlyHint: true, openWorldHint: true };
+var write = { readOnlyHint: false, openWorldHint: true };
+var destructive = { readOnlyHint: false, destructiveHint: true, openWorldHint: true };
+function registerTool(name, config2, inputSchema, handler) {
+  server.registerTool(
+    name,
+    {
+      title: config2.title,
+      description: config2.description,
+      inputSchema,
+      annotations: config2.annotations
+    },
+    (async (args, extra) => {
+      try {
+        return await handler(args, extra);
+      } catch (error2) {
+        if (error2 instanceof EachlabsError) {
+          return errorText({
+            error: error2.message,
+            status: error2.status ?? null,
+            upstream: error2.payload ?? null
+          });
+        }
+        return errorText({
+          error: `Unexpected error: ${error2 instanceof Error ? error2.message : String(error2)}`
+        });
+      }
+    })
+  );
+}
+registerTool(
   "search_each_labs",
-  "Search across the each::labs knowledge base to find relevant information, code examples, API references, and guides. This mirrors the official each::labs MCP documentation search tool.",
+  {
+    title: "Search each::labs docs",
+    description: "Search across the each::labs knowledge base to find relevant information, code examples, API references, and guides. This mirrors the official each::labs MCP documentation search tool.",
+    annotations: { ...readOnly }
+  },
   {
     query: external_exports.string().min(1).describe("Search query")
   },
   async ({ query }) => passthroughMcpResult(await callOfficialDocsTool("search_each_labs", { query }))
 );
-server.tool(
+registerTool(
   "query_docs_filesystem_each_labs",
-  "Run a read-only shell-like query against the official each::labs virtual documentation filesystem. Supports commands such as rg, tree, ls, cat, head, jq, sed, and awk. This mirrors the official each::labs MCP docs filesystem tool.",
+  {
+    title: "Query each::labs docs filesystem",
+    description: "Run a read-only shell-like query against the official each::labs virtual documentation filesystem. Supports commands such as rg, tree, ls, cat, head, jq, sed, and awk. This mirrors the official each::labs MCP docs filesystem tool.",
+    annotations: { ...readOnly }
+  },
   {
     command: external_exports.string().min(1).describe("Read-only shell command for the virtual docs filesystem, e.g. `tree / -L 2` or `head -80 /quickstart.mdx`.")
   },
-  async ({ command }) => passthroughMcpResult(
-    await callOfficialDocsTool("query_docs_filesystem_each_labs", { command })
-  )
+  async ({ command }) => passthroughMcpResult(await callOfficialDocsTool("query_docs_filesystem_each_labs", { command }))
 );
-server.tool(
+registerTool(
   "eachlabs_search_models",
-  "Search and paginate the each::labs model catalog. Use this before selecting a generation/editing/audio/video model.",
+  {
+    title: "Search model catalog",
+    description: "Search and paginate the each::labs model catalog. Returns trimmed entries (title, slug, version, output_type, request field names) by default; set full=true for raw catalog records including complete request schemas.",
+    annotations: { ...readOnly }
+  },
   {
     name: external_exports.string().optional().describe("Case-insensitive model name or slug search."),
     limit: external_exports.number().int().min(1).max(500).default(25),
-    offset: external_exports.number().int().min(0).default(0)
+    offset: external_exports.number().int().min(0).default(0),
+    full: external_exports.boolean().default(false).describe("Return raw catalog records instead of trimmed summaries.")
   },
-  async ({ name, limit, offset }) => {
-    const result = await eachRequest(
-      appendQuery("/v1/models", { name, limit, offset }),
-      { auth: false }
-    );
+  async ({ name, limit, offset, full }) => {
+    const result = await eachRequest(appendQuery("/v1/models", { name, limit, offset }), {
+      auth: false
+    });
+    if (!full && Array.isArray(result)) {
+      return text({
+        models: result.map(trimModel),
+        count: result.length,
+        note: "Trimmed view. Use eachlabs_get_model_request_schema for full field details."
+      });
+    }
     return text(result);
   }
 );
-server.tool(
+registerTool(
   "eachlabs_get_model",
-  "Fetch full metadata for a model slug, including provider, versions, and request schema when available.",
+  {
+    title: "Get model details",
+    description: "Fetch full metadata for a model slug, including provider, versions, and request schema when available.",
+    annotations: { ...readOnly }
+  },
   {
     slug: external_exports.string().min(1).describe("Model slug, for example flux-2-max.")
   },
   async ({ slug }) => text(await getModelBySlug(slug))
 );
-server.tool(
+registerTool(
   "eachlabs_get_model_request_schema",
-  "Return the model request schema in a compact field-by-field form so an agent can build valid prediction input.",
+  {
+    title: "Get model request schema",
+    description: "Return the model request schema in a compact field-by-field form so an agent can build valid prediction input. Set openapi=true to fetch the official per-model OpenAPI 3.0 schema (inputs and outputs) instead.",
+    annotations: { ...readOnly }
+  },
   {
     slug: external_exports.string().min(1),
-    raw: external_exports.boolean().default(false).describe("Return the raw JSON schema instead of the compact summary.")
+    raw: external_exports.boolean().default(false).describe("Return the raw JSON schema instead of the compact summary."),
+    openapi: external_exports.boolean().default(false).describe("Fetch GET /v1/models/{slug}/schemas/openapi \u2014 the full OpenAPI schema including output types.")
   },
-  async ({ slug, raw }) => {
+  async ({ slug, raw, openapi }) => {
+    if (openapi) {
+      return text({
+        slug,
+        openapi_schema: await eachRequest(`/v1/models/${slug}/schemas/openapi`)
+      });
+    }
     const model = await getModelBySlug(slug);
     const schema = getRequestSchema(model);
     return text({
@@ -23616,9 +23947,13 @@ server.tool(
     });
   }
 );
-server.tool(
+registerTool(
   "eachlabs_generate_example_input",
-  "Generate a best-effort valid example input object for a model from its documented request_schema.",
+  {
+    title: "Generate example model input",
+    description: "Generate a best-effort valid example input object for a model from its documented request_schema.",
+    annotations: { ...readOnly }
+  },
   {
     slug: external_exports.string().min(1),
     include_optional: external_exports.boolean().default(false),
@@ -23635,9 +23970,13 @@ server.tool(
     });
   }
 );
-server.tool(
+registerTool(
   "eachlabs_validate_model_input",
-  "Validate model input locally against the documented request_schema before creating a prediction.",
+  {
+    title: "Validate model input",
+    description: "Validate model input locally against the documented request_schema before creating a prediction.",
+    annotations: { ...readOnly }
+  },
   {
     slug: external_exports.string().min(1),
     input: jsonObjectSchema
@@ -23652,9 +23991,13 @@ server.tool(
     });
   }
 );
-server.tool(
+registerTool(
   "eachlabs_find_models_by_schema",
-  "Find models by catalog text, output type, and request_schema field names such as prompt, image_url, aspect_ratio, duration, or seed.",
+  {
+    title: "Find models by schema fields",
+    description: "Find models by catalog text, output type, and request_schema field names such as prompt, image_url, aspect_ratio, duration, or seed.",
+    annotations: { ...readOnly }
+  },
   {
     query: external_exports.string().optional().describe("Text to match against model title, slug, or provider."),
     required_fields: external_exports.array(external_exports.string()).default([]).describe("Fields that must exist in the request schema."),
@@ -23679,19 +24022,17 @@ server.tool(
       if (required_fields.some((field) => !fields.has(field))) return false;
       if (any_fields.length > 0 && !any_fields.some((field) => fields.has(field))) return false;
       return true;
-    }).slice(0, limit).map((model) => ({
-      title: model.title,
-      slug: model.slug,
-      version: model.version,
-      output_type: model.output_type,
-      request_fields: Object.keys(schemaProperties(getRequestSchema(model)))
-    }));
+    }).slice(0, limit).map(trimModel);
     return text({ matches, scanned: models.length });
   }
 );
-server.tool(
+registerTool(
   "eachlabs_recommend_models",
-  "Recommend models for a use case by scoring catalog text, output type, and request_schema fields.",
+  {
+    title: "Recommend models",
+    description: "Recommend models for a use case by scoring catalog text, output type, and request_schema fields.",
+    annotations: { ...readOnly }
+  },
   {
     use_case: external_exports.string().min(1).describe("Example: text to image, image to video, voice cloning, background removal."),
     output_type: external_exports.string().optional(),
@@ -23704,11 +24045,7 @@ server.tool(
     const models = await getAllModels(max_scan);
     const recommendations = models.map((model) => ({
       score: scoreModel(model, terms, required_fields, output_type),
-      title: model.title,
-      slug: model.slug,
-      version: model.version,
-      output_type: model.output_type,
-      request_fields: Object.keys(schemaProperties(getRequestSchema(model)))
+      ...trimModel(model)
     })).filter((model) => model.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
     return text({
       use_case,
@@ -23718,156 +24055,195 @@ server.tool(
     });
   }
 );
-server.tool(
+registerTool(
   "eachlabs_create_prediction",
-  "Create an async prediction for a model. First call eachlabs_get_model_request_schema to build the input correctly.",
+  {
+    title: "Create prediction",
+    description: "Run a model. mode 'async' (default) returns a prediction ID to poll with eachlabs_get_prediction; 'wait' creates then polls until done; 'sync' uses POST /v1/prediction/run for models that support synchronous execution (others return 400). Input is validated locally against the model's request_schema first unless validate_input=false.",
+    annotations: { ...write }
+  },
   {
     model: external_exports.string().min(1).describe("Model slug or identifier."),
-    input: jsonObjectSchema.describe("Model-specific request parameters."),
-    version: external_exports.string().optional(),
+    input: jsonObjectSchema.describe(
+      "Model-specific request parameters. enable_safety_checker (supported models only) also goes in here."
+    ),
+    mode: external_exports.enum(["async", "wait", "sync"]).default("async"),
+    validate_input: external_exports.boolean().default(true).describe("Validate input against the model request_schema before creating. Skipped if no schema is documented."),
     webhook_url: external_exports.string().url().optional(),
-    webhook_secret: external_exports.string().optional()
+    webhook_secret: external_exports.string().optional().describe("HMAC-SHA256 secret used to sign webhook deliveries."),
+    timeout_seconds: external_exports.number().int().min(1).max(1800).default(300).describe("Only used for mode 'wait' and 'sync'."),
+    poll_interval_seconds: external_exports.number().min(0.5).max(30).default(3).describe("Only used for mode 'wait'."),
+    include_media: external_exports.boolean().default(true).describe("Attach successful outputs as media content blocks (inline images, links for video/audio)."),
+    embed_images: external_exports.boolean().default(true).describe("Inline image outputs up to 3 MB as image content; larger ones become resource links.")
   },
-  async ({ model, input, version: version2, webhook_url, webhook_secret }) => text(
-    await eachRequest("/v1/prediction", {
-      method: "POST",
-      body: JSON.stringify({ model, input, version: version2, webhook_url, webhook_secret })
-    })
-  )
-);
-server.tool(
-  "eachlabs_create_prediction_checked",
-  "Validate input against request_schema, then create a prediction only if validation passes unless allow_warnings is false and warnings exist.",
-  {
-    model: external_exports.string().min(1).describe("Model slug or identifier."),
-    input: jsonObjectSchema.describe("Model-specific request parameters."),
-    version: external_exports.string().optional(),
-    webhook_url: external_exports.string().url().optional(),
-    webhook_secret: external_exports.string().optional(),
-    allow_warnings: external_exports.boolean().default(true)
-  },
-  async ({ model, input, version: version2, webhook_url, webhook_secret, allow_warnings }) => {
-    const modelDetails = await getModelBySlug(model);
-    const schema = getRequestSchema(modelDetails);
-    const validation = validateAgainstSchema(schema, input);
-    if (!validation.valid || !allow_warnings && validation.warnings.length > 0) {
-      return text({
-        created: false,
-        validation,
-        schema: summarizeJsonSchema(schema)
-      });
+  async ({
+    model,
+    input,
+    mode,
+    validate_input,
+    webhook_url,
+    webhook_secret,
+    timeout_seconds,
+    poll_interval_seconds,
+    include_media,
+    embed_images
+  }, extra) => {
+    if (validate_input) {
+      const modelDetails = await getModelBySlug(model);
+      const schema = getRequestSchema(modelDetails);
+      if (schema) {
+        const validation = validateAgainstSchema(schema, input);
+        if (!validation.valid) {
+          return errorText({
+            created: false,
+            validation,
+            schema: summarizeJsonSchema(schema)
+          });
+        }
+      }
     }
-    const prediction = await eachRequest("/v1/prediction", {
-      method: "POST",
-      body: JSON.stringify({ model, input, version: version2, webhook_url, webhook_secret })
-    });
-    return text({ created: true, validation, prediction });
-  }
-);
-server.tool(
-  "eachlabs_run_model",
-  "Create a prediction and wait for completion in one call. Useful for simple model runs after validating input.",
-  {
-    model: external_exports.string().min(1),
-    input: jsonObjectSchema,
-    version: external_exports.string().optional(),
-    webhook_url: external_exports.string().url().optional(),
-    webhook_secret: external_exports.string().optional(),
-    timeout_seconds: external_exports.number().int().min(1).max(1800).default(300),
-    poll_interval_seconds: external_exports.number().min(0.5).max(30).default(3)
-  },
-  async ({ model, input, version: version2, webhook_url, webhook_secret, timeout_seconds, poll_interval_seconds }) => {
+    const body = JSON.stringify({ model, input, webhook_url, webhook_secret });
+    if (mode === "sync") {
+      const result = await eachRequest("/v1/prediction/run", {
+        method: "POST",
+        body,
+        timeoutMs: Math.max(timeout_seconds * 1e3, DEFAULT_TIMEOUT_MS)
+      });
+      return predictionToolResult(result, result, include_media, embed_images);
+    }
     const created = await eachRequest("/v1/prediction", {
       method: "POST",
-      body: JSON.stringify({ model, input, version: version2, webhook_url, webhook_secret })
+      body
     });
-    const predictionId = String(created.id ?? created.prediction_id ?? "");
-    if (!predictionId) return text({ created, warning: "Prediction response did not include id/prediction_id." });
-    const deadline = Date.now() + timeout_seconds * 1e3;
-    let last;
-    while (Date.now() <= deadline) {
-      last = await eachRequest(`/v1/prediction/${predictionId}`);
-      const status = String(last.status ?? "").toLowerCase();
-      if (["success", "failed", "cancelled"].includes(status)) {
-        return text({ created, final: last });
-      }
-      await new Promise((resolve) => setTimeout(resolve, poll_interval_seconds * 1e3));
+    if (mode === "async") return text(created);
+    const predictionId = String(created.predictionID ?? created.id ?? created.prediction_id ?? "");
+    if (!predictionId) {
+      return text({ created, warning: "Prediction response did not include a prediction ID; cannot wait." });
     }
-    return text({ created, status: "timeout", last });
+    const { completed, last } = await pollUntilDone(
+      () => eachRequest(`/v1/prediction/${predictionId}`),
+      PREDICTION_TERMINAL_STATUSES,
+      timeout_seconds,
+      poll_interval_seconds,
+      extra
+    );
+    if (!completed) return text({ created, status: "timeout", last });
+    return predictionToolResult({ created, final: last }, last, include_media, embed_images);
   }
 );
-server.tool(
+registerTool(
   "eachlabs_get_prediction",
-  "Get the current status, output, logs, cost, and related URLs for a prediction.",
   {
-    prediction_id: external_exports.string().min(1)
+    title: "Get prediction",
+    description: "Get the current status, output, logs, cost, and related URLs for a prediction. Set wait=true to poll until it reaches a terminal status (success, failed, cancelled) or times out.",
+    annotations: { ...readOnly }
   },
-  async ({ prediction_id }) => text(await eachRequest(`/v1/prediction/${prediction_id}`))
-);
-server.tool(
-  "eachlabs_wait_prediction",
-  "Poll a prediction until it succeeds, fails, is cancelled, or times out.",
   {
     prediction_id: external_exports.string().min(1),
-    timeout_seconds: external_exports.number().int().min(1).max(1800).default(300),
-    poll_interval_seconds: external_exports.number().min(0.5).max(30).default(3)
+    wait: external_exports.boolean().default(false),
+    timeout_seconds: external_exports.number().int().min(1).max(1800).default(300).describe("Only used when wait=true."),
+    poll_interval_seconds: external_exports.number().min(0.5).max(30).default(3).describe("Only used when wait=true."),
+    include_media: external_exports.boolean().default(true).describe("Attach successful outputs as media content blocks (inline images, links for video/audio)."),
+    embed_images: external_exports.boolean().default(true).describe("Inline image outputs up to 3 MB as image content; larger ones become resource links.")
   },
-  async ({ prediction_id, timeout_seconds, poll_interval_seconds }) => {
-    const deadline = Date.now() + timeout_seconds * 1e3;
-    let last;
-    while (Date.now() <= deadline) {
-      last = await eachRequest(`/v1/prediction/${prediction_id}`);
-      const status = String(last.status ?? "").toLowerCase();
-      if (["success", "failed", "cancelled"].includes(status)) {
-        return text(last);
-      }
-      await new Promise((resolve) => setTimeout(resolve, poll_interval_seconds * 1e3));
+  async ({ prediction_id, wait, timeout_seconds, poll_interval_seconds, include_media, embed_images }, extra) => {
+    if (!wait) {
+      const prediction = await eachRequest(`/v1/prediction/${prediction_id}`);
+      return predictionToolResult(prediction, prediction, include_media, embed_images);
     }
-    return text({
-      status: "timeout",
-      prediction_id,
-      last
-    });
+    const { completed, last } = await pollUntilDone(
+      () => eachRequest(`/v1/prediction/${prediction_id}`),
+      PREDICTION_TERMINAL_STATUSES,
+      timeout_seconds,
+      poll_interval_seconds,
+      extra
+    );
+    if (!completed) return text({ status: "timeout", prediction_id, last });
+    return predictionToolResult(last, last, include_media, embed_images);
   }
 );
-server.tool(
+registerTool(
   "eachlabs_cancel_prediction",
-  "Cancel a running prediction.",
+  {
+    title: "Cancel prediction",
+    description: "Cancel a running prediction. Best-effort for upstream providers.",
+    annotations: { ...write, idempotentHint: true }
+  },
   {
     prediction_id: external_exports.string().min(1)
   },
   async ({ prediction_id }) => text(await eachRequest(`/v1/prediction/${prediction_id}/cancel`, { method: "POST" }))
 );
-server.tool(
+registerTool(
+  "eachlabs_list_executions",
+  {
+    title: "List execution history",
+    description: "List prediction and workflow execution history for the API key, with per-execution cost and runtime. Filter by model slug, status, workflow, or time window.",
+    annotations: { ...readOnly }
+  },
+  {
+    limit: external_exports.number().int().min(1).max(100).default(20),
+    offset: external_exports.number().int().min(0).default(0),
+    model: external_exports.string().optional().describe("Filter by model slug."),
+    status: external_exports.string().optional().describe("Comma-separated statuses, e.g. success,failed."),
+    workflow_id: external_exports.string().optional(),
+    workflow_execution_id: external_exports.string().optional(),
+    from: external_exports.string().optional().describe("RFC 3339 start of time window, e.g. 2026-06-01T00:00:00Z."),
+    to: external_exports.string().optional().describe("RFC 3339 end of time window.")
+  },
+  async ({ limit, offset, model, status, workflow_id, workflow_execution_id, from, to }) => text(
+    await eachRequest(
+      appendQuery("/v1/executions", { limit, offset, model, status, workflow_id, workflow_execution_id, from, to })
+    )
+  )
+);
+registerTool(
   "eachlabs_presign_upload",
-  "Request a presigned upload URL for media files, then PUT bytes to presigned_url and pass public_url to model inputs.",
+  {
+    title: "Presign file upload",
+    description: "Request a presigned upload URL for media files, then PUT bytes to presigned_url (echoing required_headers) and pass public_url to model inputs.",
+    annotations: { ...write }
+  },
   {
     content_type: external_exports.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
-    file_type: external_exports.enum(["image", "video", "audio", "other"]).default("other")
+    file_type: external_exports.enum(["image", "video", "audio", "other"]).default("other"),
+    expires_in_seconds: external_exports.number().int().min(1).optional().describe("Optional retention control for the stored file.")
   },
-  async ({ content_type, file_type }) => text(
+  async ({ content_type, file_type, expires_in_seconds }) => text(
     await eachRequest("/v1/upload/presign", {
       method: "POST",
-      body: JSON.stringify({ content_type, file_type })
+      body: JSON.stringify({ content_type, file_type, expires_in_seconds })
     })
   )
 );
-server.tool(
+registerTool(
   "eachlabs_upload_file",
-  "Upload a local file through Eachlabs presigned storage and return the public_url for model inputs. Max documented upload size is 100 MB.",
+  {
+    title: "Upload local file",
+    description: "Upload a local file through Eachlabs presigned storage and return the public_url for model inputs. Max documented upload size is 100 MB.",
+    annotations: { ...write }
+  },
   {
     file_path: external_exports.string().min(1).describe("Absolute local file path."),
     content_type: external_exports.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
-    file_type: external_exports.enum(["image", "video", "audio", "other"]).default("other")
+    file_type: external_exports.enum(["image", "video", "audio", "other"]).default("other"),
+    expires_in_seconds: external_exports.number().int().min(1).optional().describe("Optional retention control for the stored file.")
   },
-  async ({ file_path, content_type, file_type }) => {
+  async ({ file_path, content_type, file_type, expires_in_seconds }) => {
+    const info = await stat(file_path);
+    if (info.size > MAX_UPLOAD_BYTES) {
+      return errorText({
+        uploaded: false,
+        error: `File is ${info.size} bytes; the documented upload limit is 100 MB.`
+      });
+    }
     const presign = await eachRequest("/v1/upload/presign", {
       method: "POST",
-      body: JSON.stringify({ content_type, file_type })
+      body: JSON.stringify({ content_type, file_type, expires_in_seconds })
     });
     const presignedUrl = String(presign.presigned_url ?? "");
     if (!presignedUrl) {
-      return text({ uploaded: false, presign, error: "presigned_url missing from response." });
+      return errorText({ uploaded: false, presign, error: "presigned_url missing from response." });
     }
     const requiredHeaders = presign.required_headers && typeof presign.required_headers === "object" ? presign.required_headers : {};
     const bytes = await readFile(file_path);
@@ -23880,7 +24256,7 @@ server.tool(
       body: bytes
     });
     if (!uploadResponse.ok) {
-      return text({
+      return errorText({
         uploaded: false,
         status: uploadResponse.status,
         response: await uploadResponse.text(),
@@ -23895,32 +24271,63 @@ server.tool(
     });
   }
 );
-server.tool(
+registerTool(
+  "eachlabs_delete_file",
+  {
+    title: "Delete uploaded file",
+    description: "Permanently delete an uploaded file by the ID returned from presign/upload. Idempotent; returns 409 if the upload is still processing.",
+    annotations: { ...destructive, idempotentHint: true }
+  },
+  {
+    file_id: external_exports.string().min(1).describe("File ID from the presign response.")
+  },
+  async ({ file_id }) => {
+    const result = await eachRequest(`/v1/files/${file_id}`, { method: "DELETE" });
+    return text(result === "" ? { deleted: true, file_id } : result);
+  }
+);
+registerTool(
   "eachlabs_list_webhooks",
-  "List recent webhook deliveries for the authenticated organization.",
+  {
+    title: "List webhook deliveries",
+    description: "List recent webhook deliveries for the authenticated organization.",
+    annotations: { ...readOnly }
+  },
   {
     limit: external_exports.number().int().min(1).max(100).default(25),
     offset: external_exports.number().int().min(0).default(0)
   },
   async ({ limit, offset }) => text(await eachRequest(appendQuery("/v1/webhooks", { limit, offset })))
 );
-server.tool(
+registerTool(
   "eachlabs_get_webhook",
-  "Get webhook details and delivery attempts by execution ID.",
+  {
+    title: "Get webhook delivery",
+    description: "Get webhook details and delivery attempts by execution ID.",
+    annotations: { ...readOnly }
+  },
   {
     execution_id: external_exports.string().min(1)
   },
   async ({ execution_id }) => text(await eachRequest(`/v1/webhooks/${execution_id}`))
 );
-server.tool(
+registerTool(
   "eachlabs_list_workflow_categories",
-  "List workflow categories available for creating or organizing workflows.",
+  {
+    title: "List workflow categories",
+    description: "List workflow categories available for creating or organizing workflows.",
+    annotations: { ...readOnly }
+  },
   {},
   async () => text(await eachRequest("/categories", { baseUrl: EACH_WORKFLOWS_BASE_URL }))
 );
-server.tool(
+registerTool(
   "eachlabs_create_workflow",
-  "Create a workflow with its initial version. Use model request schemas to build model-step params.",
+  {
+    title: "Create workflow",
+    description: "Create a workflow with its initial version. Use model request schemas to build model-step params.",
+    annotations: { ...write }
+  },
   {
     workflow: jsonObjectSchema.describe(
       "CreateWorkflowRequest body from the each::workflows API, including name, description, categories, and definition."
@@ -23934,9 +24341,25 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
+  "eachlabs_get_workflow",
+  {
+    title: "Get workflow",
+    description: "Fetch workflow metadata and versions by workflow ID or slug. Note: the workflows API has no list endpoint; you must know the ID or slug.",
+    annotations: { ...readOnly }
+  },
+  {
+    workflow_id: external_exports.string().min(1).describe("Workflow UUID or slug.")
+  },
+  async ({ workflow_id }) => text(await eachRequest(`/workflows/${workflow_id}`, { baseUrl: EACH_WORKFLOWS_BASE_URL }))
+);
+registerTool(
   "eachlabs_update_workflow",
-  "Update workflow metadata such as name, description, categories, locked, or production.",
+  {
+    title: "Update workflow",
+    description: "Update workflow metadata such as name, description, categories, locked, or production. Fails with 403 if the workflow is locked.",
+    annotations: { ...destructive }
+  },
   {
     workflow_id: external_exports.string().min(1),
     updates: jsonObjectSchema.describe("UpdateWorkflowRequest body.")
@@ -23949,9 +24372,13 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachlabs_upsert_workflow_version",
-  "Create or update a workflow version, including definition steps, input_schema, fallback config, and sharing flags.",
+  {
+    title: "Upsert workflow version",
+    description: "Create or update a workflow version, including definition steps, input_schema, fallback config, and sharing flags. Locked versions are immutable; the upserted version becomes latest.",
+    annotations: { ...destructive }
+  },
   {
     workflow_id: external_exports.string().min(1),
     version_id: external_exports.string().min(1),
@@ -23965,32 +24392,17 @@ server.tool(
     })
   )
 );
-server.tool(
-  "eachlabs_list_workflows",
-  "Deprecated placeholder. The public workflows API does not expose a list-workflows endpoint; use eachlabs_get_workflow when you know the ID or slug.",
-  {
-    note: external_exports.string().optional()
-  },
-  async () => text({
-    error: "No GET /workflows endpoint is documented by each::workflows.",
-    alternatives: ["eachlabs_get_workflow", "eachlabs_create_workflow", "eachlabs_list_workflow_categories"]
-  })
-);
-server.tool(
-  "eachlabs_get_workflow",
-  "Fetch workflow metadata and versions by workflow ID.",
-  {
-    workflow_id: external_exports.string().min(1)
-  },
-  async ({ workflow_id }) => text(await eachRequest(`/workflows/${workflow_id}`, { baseUrl: EACH_WORKFLOWS_BASE_URL }))
-);
-server.tool(
+registerTool(
   "eachlabs_execute_workflow",
-  "Execute an each::workflows workflow with input parameters.",
+  {
+    title: "Execute workflow",
+    description: "Execute an each::workflows workflow with input parameters. Returns an execution_id to poll with eachlabs_get_workflow_execution.",
+    annotations: { ...write }
+  },
   {
     workflow_id: external_exports.string().min(1),
     inputs: jsonObjectSchema.default({}),
-    version_id: external_exports.string().optional(),
+    version_id: external_exports.string().optional().describe("Defaults to the latest version."),
     webhook_url: external_exports.string().url().optional()
   },
   async ({ workflow_id, inputs, version_id, webhook_url }) => text(
@@ -24001,12 +24413,16 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachlabs_bulk_execute_workflow",
-  "Trigger a workflow multiple times in one bulk operation.",
+  {
+    title: "Bulk execute workflow",
+    description: "Trigger a workflow up to 10 times in one bulk operation. Returns a bulk_id plus per-item executions.",
+    annotations: { ...write }
+  },
   {
     workflow_id: external_exports.string().min(1),
-    inputs: external_exports.array(jsonObjectSchema).min(1).describe("One input object per execution."),
+    inputs: external_exports.array(jsonObjectSchema).min(1).max(10).describe("One input object per execution; the API allows 1-10 items."),
     version_id: external_exports.string().optional(),
     webhook_url: external_exports.string().url().optional()
   },
@@ -24018,9 +24434,13 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachlabs_list_workflow_executions",
-  "List executions for a specific workflow, optionally filtered by bulk_id.",
+  {
+    title: "List workflow executions",
+    description: "List executions for a specific workflow, optionally filtered by bulk_id.",
+    annotations: { ...readOnly }
+  },
   {
     workflow_id: external_exports.string().min(1),
     limit: external_exports.number().int().min(1).max(100).default(25),
@@ -24033,45 +24453,41 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachlabs_get_workflow_execution",
-  "Get status and step details for a workflow execution.",
   {
-    execution_id: external_exports.string().min(1)
+    title: "Get workflow execution",
+    description: "Get status and per-step details for a workflow execution. Set wait=true to poll until it reaches a terminal status (completed, failed, cancelled) or times out.",
+    annotations: { ...readOnly }
   },
-  async ({ execution_id }) => text(await eachRequest(`/executions/${execution_id}`, { baseUrl: EACH_WORKFLOWS_BASE_URL }))
-);
-server.tool(
-  "eachlabs_wait_workflow_execution",
-  "Poll a workflow execution until it completes, fails, is cancelled, or times out.",
   {
     execution_id: external_exports.string().min(1),
-    timeout_seconds: external_exports.number().int().min(1).max(3600).default(600),
-    poll_interval_seconds: external_exports.number().min(0.5).max(30).default(5)
+    wait: external_exports.boolean().default(false),
+    timeout_seconds: external_exports.number().int().min(1).max(3600).default(600).describe("Only used when wait=true."),
+    poll_interval_seconds: external_exports.number().min(0.5).max(30).default(5).describe("Only used when wait=true.")
   },
-  async ({ execution_id, timeout_seconds, poll_interval_seconds }) => {
-    const deadline = Date.now() + timeout_seconds * 1e3;
-    let last;
-    while (Date.now() <= deadline) {
-      last = await eachRequest(`/executions/${execution_id}`, {
-        baseUrl: EACH_WORKFLOWS_BASE_URL
-      });
-      const status = String(last.status ?? "").toLowerCase();
-      if (["completed", "failed", "cancelled"].includes(status)) {
-        return text(last);
-      }
-      await new Promise((resolve) => setTimeout(resolve, poll_interval_seconds * 1e3));
-    }
-    return text({
-      status: "timeout",
-      execution_id,
-      last
+  async ({ execution_id, wait, timeout_seconds, poll_interval_seconds }, extra) => {
+    const fetchExecution = () => eachRequest(`/executions/${execution_id}`, {
+      baseUrl: EACH_WORKFLOWS_BASE_URL
     });
+    if (!wait) return text(await fetchExecution());
+    const { completed, last } = await pollUntilDone(
+      fetchExecution,
+      WORKFLOW_TERMINAL_STATUSES,
+      timeout_seconds,
+      poll_interval_seconds,
+      extra
+    );
+    return text(completed ? last : { status: "timeout", execution_id, last });
   }
 );
-server.tool(
+registerTool(
   "eachlabs_get_public_workflow_version",
-  "Fetch a public or unlisted workflow version by organization nickname, workflow slug, and version ID.",
+  {
+    title: "Get public workflow version",
+    description: "Fetch a public or unlisted workflow version by organization nickname, workflow slug, and version ID.",
+    annotations: { ...readOnly }
+  },
   {
     nickname: external_exports.string().min(1).describe("Organization nickname without @."),
     slug: external_exports.string().min(1),
@@ -24084,9 +24500,13 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachlabs_execute_public_workflow_version",
-  "Trigger a public or unlisted workflow version by organization nickname, workflow slug, and version ID.",
+  {
+    title: "Execute public workflow version",
+    description: "Trigger a public or unlisted workflow version by organization nickname, workflow slug, and version ID.",
+    annotations: { ...write }
+  },
   {
     nickname: external_exports.string().min(1).describe("Organization nickname without @."),
     slug: external_exports.string().min(1),
@@ -24102,88 +24522,136 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachsense_chat_completion",
-  "Call the each::sense OpenAI-compatible chat completions endpoint. Use for agent/chat/tool workflows when the API key has each::sense access.",
   {
-    model: external_exports.string().min(1).default("each/sense"),
+    title: "each::sense chat completion",
+    description: "Call the each::sense OpenAI-compatible chat completions endpoint (agentic media generation, workflow help). For plain LLM routing across providers use eachlabs_llm_chat_completion instead. Upstream SSE is consumed server-side and returned as aggregated text plus notable events.",
+    annotations: { ...write }
+  },
+  {
+    model: external_exports.string().min(1).default("eachsense/beta"),
     messages: external_exports.array(chatMessageSchema).min(1),
+    stream: external_exports.boolean().default(true).describe(
+      "Use upstream streaming, aggregated server-side (recommended: progress notifications, no idle timeout). false requests a single buffered JSON response."
+    ),
+    session_id: external_exports.string().optional().describe("Continue an existing each::sense session."),
+    mode: external_exports.enum(["max", "eco"]).optional(),
+    behavior: external_exports.enum(["agent", "plan", "ask"]).optional(),
+    image_urls: external_exports.array(external_exports.string().url()).max(4).optional().describe("Up to 4 input image URLs."),
+    web_search: external_exports.boolean().optional(),
+    workflow_id: external_exports.string().optional(),
+    version_id: external_exports.string().optional(),
     tools: external_exports.array(external_exports.unknown()).optional(),
     tool_choice: external_exports.unknown().optional(),
     temperature: external_exports.number().min(0).max(2).optional(),
     max_tokens: external_exports.number().int().min(1).optional(),
-    stream: external_exports.boolean().default(false).describe("Streaming is not consumed by this MCP tool; leave false unless the API returns buffered JSON."),
     extra: jsonObjectSchema.default({}).describe("Additional provider-specific request fields.")
   },
-  async ({ model, messages, tools, tool_choice, temperature, max_tokens, stream, extra }) => text(
-    await eachRequest("/chat/completions", {
-      baseUrl: EACH_SENSE_V1_BASE_URL,
-      method: "POST",
-      body: JSON.stringify({
-        model,
-        messages,
-        tools,
-        tool_choice,
-        temperature,
-        max_tokens,
-        stream,
-        ...extra
+  async ({
+    model,
+    messages,
+    stream,
+    session_id,
+    mode,
+    behavior,
+    image_urls,
+    web_search,
+    workflow_id,
+    version_id,
+    tools,
+    tool_choice,
+    temperature,
+    max_tokens,
+    extra
+  }, handlerExtra) => {
+    const payload = {
+      model,
+      messages,
+      session_id,
+      mode,
+      behavior,
+      image_urls,
+      web_search,
+      workflow_id,
+      version_id,
+      tools,
+      tool_choice,
+      temperature,
+      max_tokens,
+      ...extra
+    };
+    if (stream) {
+      return text(
+        await eachRequestStreaming(
+          "/chat/completions",
+          { baseUrl: EACH_SENSE_V1_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          handlerExtra
+        )
+      );
+    }
+    return text(
+      await eachRequest("/chat/completions", {
+        baseUrl: EACH_SENSE_V1_BASE_URL,
+        method: "POST",
+        timeoutMs: 3e5,
+        body: JSON.stringify({ ...payload, stream: false })
       })
-    })
-  )
+    );
+  }
 );
-server.tool(
+registerTool(
   "eachsense_list_models",
-  "List each::sense OpenAI-compatible exposed models.",
+  {
+    title: "List each::sense models",
+    description: "List each::sense OpenAI-compatible exposed models.",
+    annotations: { ...readOnly }
+  },
   {},
   async () => text(await eachRequest("/models", { baseUrl: EACH_SENSE_V1_BASE_URL }))
 );
-server.tool(
-  "eachlabs_llm_list_models",
-  "List OpenAI-compatible LLM Router models if the /v1/models route is enabled for the account.",
-  {},
-  async () => text(await eachRequest("/v1/models", { baseUrl: EACH_API_BASE_URL }))
-);
-server.tool(
-  "eachlabs_llm_chat_completion",
-  "Call the Eachlabs OpenAI-compatible LLM router chat completions endpoint with any supported model.",
-  {
-    model: external_exports.string().min(1),
-    messages: external_exports.array(chatMessageSchema).min(1),
-    temperature: external_exports.number().min(0).max(2).optional(),
-    max_tokens: external_exports.number().int().min(1).optional(),
-    stream: external_exports.boolean().default(false).describe("Streaming is not consumed by this MCP tool; leave false unless the API returns buffered JSON."),
-    extra: jsonObjectSchema.default({})
-  },
-  async ({ model, messages, temperature, max_tokens, stream, extra }) => text(
-    await eachRequest("/chat/completions", {
-      baseUrl: EACH_SENSE_BASE_URL,
-      method: "POST",
-      body: JSON.stringify({ model, messages, temperature, max_tokens, stream, ...extra })
-    })
-  )
-);
-server.tool(
+registerTool(
   "eachsense_build_workflow",
-  "Use each::sense Workflow Builder to create or update a multi-step AI workflow from natural language.",
+  {
+    title: "each::sense workflow builder",
+    description: "Use each::sense Workflow Builder to create or update a multi-step AI workflow from natural language.",
+    annotations: { ...write }
+  },
   {
     message: external_exports.string().min(1).describe("Workflow description or modification instruction."),
     workflow_id: external_exports.string().optional(),
     version_id: external_exports.string().optional(),
     session_id: external_exports.string().optional(),
-    stream: external_exports.boolean().default(false).describe("This MCP tool expects buffered JSON, so false is recommended.")
+    stream: external_exports.boolean().default(false).describe("Consume upstream streaming server-side for progress notifications; the final result is the same.")
   },
-  async ({ message, workflow_id, version_id, session_id, stream }) => text(
-    await eachRequest("/workflow", {
-      baseUrl: EACH_SENSE_BASE_URL,
-      method: "POST",
-      body: JSON.stringify({ message, workflow_id, version_id, session_id, stream })
-    })
-  )
+  async ({ message, workflow_id, version_id, session_id, stream }, handlerExtra) => {
+    const payload = { message, workflow_id, version_id, session_id };
+    if (stream) {
+      return text(
+        await eachRequestStreaming(
+          "/workflow",
+          { baseUrl: EACH_SENSE_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          handlerExtra
+        )
+      );
+    }
+    return text(
+      await eachRequest("/workflow", {
+        baseUrl: EACH_SENSE_BASE_URL,
+        method: "POST",
+        timeoutMs: 3e5,
+        body: JSON.stringify({ ...payload, stream: false })
+      })
+    );
+  }
 );
-server.tool(
+registerTool(
   "eachsense_list_sessions",
-  "List each::sense sessions if the sessions API is enabled for the account.",
+  {
+    title: "List each::sense sessions",
+    description: "List each::sense sessions if the sessions API is enabled for the account.",
+    annotations: { ...readOnly }
+  },
   {
     limit: external_exports.number().int().min(1).max(100).default(25),
     offset: external_exports.number().int().min(0).default(0)
@@ -24194,9 +24662,13 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachsense_get_session",
-  "Get each::sense session memory by session_id.",
+  {
+    title: "Get each::sense session",
+    description: "Get each::sense session memory (conversation history and generated media URLs) by session_id.",
+    annotations: { ...readOnly }
+  },
   {
     session_id: external_exports.string().min(1)
   },
@@ -24206,9 +24678,13 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
   "eachsense_delete_session",
-  "Delete or clear an each::sense session by ID if the sessions API is enabled for the account.",
+  {
+    title: "Delete each::sense session",
+    description: "Delete or clear an each::sense session by ID if the sessions API is enabled for the account.",
+    annotations: { ...destructive, idempotentHint: true }
+  },
   {
     session_id: external_exports.string().min(1)
   },
@@ -24219,18 +24695,58 @@ server.tool(
     })
   )
 );
-server.tool(
+registerTool(
+  "eachlabs_llm_list_models",
+  {
+    title: "List LLM router catalog",
+    description: "Fetch the curated LLM router model catalog (GET /v1/llm-router/model-catalog): 300+ chat models across OpenAI, Anthropic, Google, Meta, and others with routing metadata.",
+    annotations: { ...readOnly }
+  },
+  {},
+  async () => text(await eachRequest("/v1/llm-router/model-catalog"))
+);
+registerTool(
+  "eachlabs_llm_chat_completion",
+  {
+    title: "LLM router chat completion",
+    description: "Call the Eachlabs OpenAI-compatible LLM router (POST api.eachlabs.ai/v1/chat/completions, Bearer auth) with any supported model in provider/model-name format. Responses are buffered (non-streaming). Set webhook_url for async result delivery instead.",
+    annotations: { ...write }
+  },
+  {
+    model: external_exports.string().min(1).describe("provider/model-name, e.g. openai/gpt-5 or anthropic/claude-sonnet-4-6."),
+    messages: external_exports.array(chatMessageSchema).min(1),
+    temperature: external_exports.number().min(0).max(2).optional(),
+    max_tokens: external_exports.number().int().min(1).optional(),
+    webhook_url: external_exports.string().url().optional().describe("Sent as X-Eachlabs-Webhook-Url for asynchronous result delivery."),
+    extra: jsonObjectSchema.default({})
+  },
+  async ({ model, messages, temperature, max_tokens, webhook_url, extra }) => text(
+    await eachRequest("/v1/chat/completions", {
+      method: "POST",
+      bearer: true,
+      timeoutMs: 3e5,
+      headers: webhook_url ? { "X-Eachlabs-Webhook-Url": webhook_url } : void 0,
+      body: JSON.stringify({ model, messages, temperature, max_tokens, stream: false, ...extra })
+    })
+  )
+);
+registerTool(
   "eachlabs_raw_api_request",
-  "Advanced escape hatch for documented Eachlabs endpoints not yet wrapped by a first-class MCP tool. Requires an API key except when auth=false.",
+  {
+    title: "Raw API request",
+    description: "Advanced escape hatch for documented Eachlabs endpoints (https://docs.eachlabs.ai) not yet wrapped by a first-class MCP tool. Requires an API key except when auth=false.",
+    annotations: { ...destructive }
+  },
   {
     target: external_exports.enum(["api", "sense", "sense_v1", "workflows"]).default("api"),
     method: external_exports.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"),
     path: external_exports.string().min(1).describe("Endpoint path, for example /v1/models or /workflows/{id}."),
     query: jsonObjectSchema.default({}),
     body: external_exports.unknown().optional(),
-    auth: external_exports.boolean().default(true)
+    auth: external_exports.boolean().default(true),
+    bearer: external_exports.boolean().default(false).describe("Use Authorization: Bearer instead of X-API-Key.")
   },
-  async ({ target, method, path, query, body, auth: auth2 }) => {
+  async ({ target, method, path, query, body, auth: auth2, bearer }) => {
     const baseUrl = target === "workflows" ? EACH_WORKFLOWS_BASE_URL : target === "sense_v1" ? EACH_SENSE_V1_BASE_URL : target === "sense" ? EACH_SENSE_BASE_URL : EACH_API_BASE_URL;
     const requestPath = appendQuery(path.startsWith("/") ? path : `/${path}`, query);
     return text(
@@ -24238,47 +24754,142 @@ server.tool(
         baseUrl,
         method,
         auth: auth2,
+        bearer,
         body: body === void 0 ? void 0 : JSON.stringify(body)
       })
     );
   }
 );
-server.tool(
+registerTool(
   "eachlabs_api_health",
-  "Check that the MCP server is configured and can reach public catalog endpoints. Does not expose the API key.",
+  {
+    title: "API health check",
+    description: "Check that the MCP server is configured and can reach public catalog endpoints. Does not expose the API key.",
+    annotations: { ...readOnly }
+  },
   {},
   async () => {
     const catalog = await eachRequest(appendQuery("/v1/models", { limit: 1, offset: 0 }), {
       auth: false
     });
+    let update = { current_version: SERVER_VERSION };
+    try {
+      const response = await fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(5e3) });
+      if (response.ok) {
+        const remote = await response.json();
+        update = {
+          current_version: SERVER_VERSION,
+          latest_version: remote.version ?? "unknown",
+          update_available: Boolean(remote.version && remote.version !== SERVER_VERSION),
+          how_to_update: "git pull && npm install && npm run build (or `npm run update`)"
+        };
+      }
+    } catch {
+      update.update_check = "unreachable";
+    }
     return text({
       api_base_url: EACH_API_BASE_URL,
       workflows_base_url: EACH_WORKFLOWS_BASE_URL,
+      sense_base_url: EACH_SENSE_BASE_URL,
       api_key_configured: Boolean(EACH_API_KEY),
-      catalog_probe: catalog
+      catalog_probe: Array.isArray(catalog) ? { reachable: true, sample_size: catalog.length } : catalog,
+      update
     });
   }
+);
+server.registerPrompt(
+  "eachlabs-generate-media",
+  {
+    title: "Generate media with each::labs",
+    description: "Guided flow: pick a model, validate input, run the prediction, and show the result.",
+    argsSchema: {
+      description: external_exports.string().describe("What to generate, e.g. 'a cinematic video of a sunrise over Istanbul'."),
+      output_type: external_exports.string().optional().describe("Desired output type: image, video, or audio.")
+    }
+  },
+  ({ description, output_type }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: [
+            `Generate the following with each::labs: ${description}`,
+            output_type ? `Desired output type: ${output_type}.` : "",
+            "Steps: 1) find candidate models with eachlabs_recommend_models or eachlabs_search_models;",
+            "2) inspect the chosen model with eachlabs_get_model_request_schema;",
+            "3) run it with eachlabs_create_prediction (mode 'wait' unless it is a long video job);",
+            "4) show the resulting media and report the cost from the prediction metrics."
+          ].filter(Boolean).join("\n")
+        }
+      }
+    ]
+  })
+);
+server.registerPrompt(
+  "eachlabs-build-workflow",
+  {
+    title: "Build an each::labs workflow",
+    description: "Create a multi-step each::labs workflow from a natural-language description and test-run it.",
+    argsSchema: {
+      description: external_exports.string().describe("What the workflow should do, step by step if known.")
+    }
+  },
+  ({ description }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: [
+            `Build an each::labs workflow that does the following: ${description}`,
+            "Prefer eachsense_build_workflow to draft it, then inspect the result with eachlabs_get_workflow,",
+            "refine versions via eachlabs_upsert_workflow_version if needed, and finally test it with",
+            "eachlabs_execute_workflow plus eachlabs_get_workflow_execution (wait=true)."
+          ].join("\n")
+        }
+      }
+    ]
+  })
 );
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
-main().catch((error2) => {
-  if (error2 instanceof EachlabsError) {
-    console.error(
-      JSON.stringify(
-        {
-          error: error2.message,
-          status: error2.status,
-          payload: error2.payload
-        },
-        null,
-        2
-      )
-    );
-  } else {
-    console.error(error2);
+var isMainModule = (() => {
+  try {
+    return Boolean(process.argv[1]) && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url;
+  } catch {
+    return false;
   }
-  process.exit(1);
-});
+})();
+if (isMainModule) {
+  main().catch((error2) => {
+    if (error2 instanceof EachlabsError) {
+      console.error(
+        JSON.stringify(
+          {
+            error: error2.message,
+            status: error2.status,
+            payload: error2.payload
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      console.error(error2);
+    }
+    process.exit(1);
+  });
+}
+export {
+  appendQuery,
+  collectMediaUrls,
+  generateExampleInput,
+  joinUrl,
+  summarizeJsonSchema,
+  trimModel,
+  validateAgainstSchema
+};
 //# sourceMappingURL=index.js.map

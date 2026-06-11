@@ -28,7 +28,8 @@ If MCP tools are unavailable, use the public docs index at `https://docs.eachlab
 Prefer its purpose-built tools over hand-written HTTP calls:
 
 - `eachlabs_search_models`, `eachlabs_get_model`, and `eachlabs_get_model_request_schema` for model discovery and schemas.
-- `eachlabs_create_prediction_checked`, `eachlabs_run_model`, and `eachlabs_wait_prediction` for direct generation.
+- `eachlabs_create_prediction` (mode `async`, `wait`, or `sync`; validates input locally first) and `eachlabs_get_prediction` (`wait=true` to poll) for direct generation; successful image outputs come back inline in chat.
+- `eachlabs_list_executions` for run history with cost, and `eachlabs_upload_file` for local media inputs.
 - `eachlabs_create_workflow`, `eachlabs_execute_workflow`, and workflow execution polling tools for workflows.
 - `eachsense_chat_completion` and `eachsense_build_workflow` for each::sense.
 - `eachlabs_llm_chat_completion` for LLM Router calls.

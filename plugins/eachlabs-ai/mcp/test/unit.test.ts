@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   joinUrl,
   appendQuery,
+  flagPath,
+  flagActionPath,
+  buildFlagEvaluationBody,
   summarizeJsonSchema,
   generateExampleInput,
   validateAgainstSchema,
@@ -33,6 +36,40 @@ test("appendQuery adds defined params and skips empty ones", () => {
     "/v1/models?name=flux&limit=25&offset=0",
   );
   assert.equal(appendQuery("/v1/models", {}), "/v1/models");
+});
+
+test("flagPath resolves each::flags key placeholders", () => {
+  assert.equal(flagPath("/v1/flags/{flag_key}", "rollout:alpha"), "/v1/flags/rollout%3Aalpha");
+  assert.equal(flagPath("/v1/flags/:flag_key/evaluate", "new checkout"), "/v1/flags/new%20checkout/evaluate");
+  assert.equal(flagPath("/v1/flags", "beta"), "/v1/flags/beta");
+  assert.throws(() => flagPath("/v1/flags/{flag_key}"), /flag_key is required/);
+});
+
+test("flagActionPath keeps evaluation collection paths intact", () => {
+  assert.equal(flagActionPath("/v1/flags/evaluate", "new-home"), "/v1/flags/evaluate");
+  assert.equal(flagActionPath("/v1/flags/{flag_key}/evaluate", "new-home"), "/v1/flags/new-home/evaluate");
+});
+
+test("buildFlagEvaluationBody supports default and exact upstream bodies", () => {
+  assert.deepEqual(
+    buildFlagEvaluationBody({
+      flag_key: "new-home",
+      context: { user_id: "u1" },
+      default_value: false,
+      extra: { environment: "production" },
+    }),
+    {
+      environment: "production",
+      flag_key: "new-home",
+      context: { user_id: "u1" },
+      default_value: false,
+    },
+  );
+
+  assert.deepEqual(
+    buildFlagEvaluationBody({ body: { key: "new-home", entity: { id: "u1" } } }),
+    { key: "new-home", entity: { id: "u1" } },
+  );
 });
 
 const SCHEMA = {

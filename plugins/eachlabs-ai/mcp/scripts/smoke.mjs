@@ -21,7 +21,18 @@ const check = (label, ok, detail = "") => {
 };
 
 const { tools } = await client.listTools();
-check("tool count", tools.length === 39, `${tools.length} tools`);
+check("tool count", tools.length === 45, `${tools.length} tools`);
+check(
+  "flags tools registered",
+  [
+    "eachlabs_list_flags",
+    "eachlabs_get_flag",
+    "eachlabs_evaluate_flag",
+    "eachlabs_create_flag",
+    "eachlabs_update_flag",
+    "eachlabs_delete_flag",
+  ].every((name) => tools.some((tool) => tool.name === name)),
+);
 check(
   "annotations present",
   tools.every((tool) => tool.annotations?.readOnlyHint !== undefined),

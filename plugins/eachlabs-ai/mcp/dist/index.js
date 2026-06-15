@@ -23326,7 +23326,7 @@ var MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 var MAX_EMBED_IMAGE_BYTES = 3 * 1024 * 1024;
 var MAX_MEDIA_BLOCKS = 8;
 var UPDATE_CHECK_URL = "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
-var SERVER_VERSION = "0.3.0";
+var SERVER_VERSION = "0.3.1";
 var PREDICTION_TERMINAL_STATUSES = ["success", "failed", "cancelled"];
 var WORKFLOW_TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
 var EachlabsError = class extends Error {
@@ -23442,6 +23442,41 @@ function appendQuery(path, params) {
     }
   }
   return `${url2.pathname}${url2.search}`;
+}
+function normalizePath(path) {
+  return path.startsWith("/") ? path : `/${path}`;
+}
+function flagPath(path, flagKey) {
+  const normalized = normalizePath(path);
+  if (!flagKey) {
+    if (normalized.includes("{flag_key}") || normalized.includes(":flag_key")) {
+      throw new EachlabsError("flag_key is required when the flags path contains a flag key placeholder.");
+    }
+    return normalized;
+  }
+  const encoded = encodeURIComponent(flagKey);
+  if (normalized.includes("{flag_key}")) return normalized.replaceAll("{flag_key}", encoded);
+  if (normalized.includes(":flag_key")) return normalized.replaceAll(":flag_key", encoded);
+  return `${normalized.replace(/\/+$/, "")}/${encoded}`;
+}
+function flagActionPath(path, flagKey) {
+  return path.includes("{flag_key}") || path.includes(":flag_key") ? flagPath(path, flagKey) : normalizePath(path);
+}
+function buildFlagEvaluationBody({
+  flag_key,
+  context,
+  default_value,
+  extra,
+  body
+}) {
+  if (body) return body;
+  const payload = {
+    ...extra ?? {}
+  };
+  if (flag_key) payload.flag_key = flag_key;
+  if (context && Object.keys(context).length > 0) payload.context = context;
+  if (default_value !== void 0) payload.default_value = default_value;
+  return payload;
 }
 function summarizeJsonSchema(schema) {
   if (!schema || typeof schema !== "object") return schema;
@@ -24312,6 +24347,114 @@ registerTool(
   async ({ execution_id }) => text(await eachRequest(`/v1/webhooks/${execution_id}`))
 );
 registerTool(
+  "eachlabs_list_flags",
+  {
+    title: "List each::flags",
+    description: "List each::flags feature flags for the authenticated organization. The public docs for this beta surface may lag the API; use query/path overrides if Eachlabs publishes a more specific shape.",
+    annotations: { ...readOnly }
+  },
+  {
+    query: jsonObjectSchema.default({}).describe("Query string parameters, for example limit, offset, environment, or project."),
+    path: external_exports.string().min(1).default("/v1/flags").describe("Flags list endpoint path.")
+  },
+  async ({ query, path }) => text(await eachRequest(appendQuery(normalizePath(path), query)))
+);
+registerTool(
+  "eachlabs_get_flag",
+  {
+    title: "Get each::flags flag",
+    description: "Fetch one each::flags feature flag by key. The default path is /v1/flags/{flag_key}; override path if upstream docs use another route.",
+    annotations: { ...readOnly }
+  },
+  {
+    flag_key: external_exports.string().min(1).describe("Feature flag key."),
+    query: jsonObjectSchema.default({}).describe("Optional query string parameters, such as environment."),
+    path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Path template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
+  },
+  async ({ flag_key, query, path }) => text(await eachRequest(appendQuery(flagPath(path, flag_key), query)))
+);
+registerTool(
+  "eachlabs_evaluate_flag",
+  {
+    title: "Evaluate each::flags flag",
+    description: "Evaluate an each::flags feature flag for a context. Defaults to POST /v1/flags/evaluate with {flag_key, context, default_value}; pass body/path to match the exact upstream contract if needed.",
+    annotations: { ...write, idempotentHint: true }
+  },
+  {
+    flag_key: external_exports.string().min(1).optional().describe("Feature flag key. Optional when body already contains the upstream-required identifier."),
+    context: jsonObjectSchema.default({}).describe("Evaluation context such as user, tenant, environment, or attributes."),
+    default_value: external_exports.unknown().optional().describe("Fallback value if the flag cannot be evaluated."),
+    extra: jsonObjectSchema.default({}).describe("Additional fields to merge into the default evaluation body."),
+    body: jsonObjectSchema.optional().describe("Exact upstream request body. When provided, it replaces flag_key/context/default_value/extra."),
+    path: external_exports.string().min(1).default("/v1/flags/evaluate").describe("Evaluation endpoint path. Supports {flag_key} or :flag_key placeholders.")
+  },
+  async ({ flag_key, context, default_value, extra, body, path }) => {
+    if (!body && !flag_key) {
+      return errorText({
+        evaluated: false,
+        error: "Provide flag_key, or pass body with the exact upstream evaluation payload."
+      });
+    }
+    return text(
+      await eachRequest(flagActionPath(path, flag_key), {
+        method: "POST",
+        body: JSON.stringify(buildFlagEvaluationBody({ flag_key, context, default_value, extra, body }))
+      })
+    );
+  }
+);
+registerTool(
+  "eachlabs_create_flag",
+  {
+    title: "Create each::flags flag",
+    description: "Create an each::flags feature flag. This changes live flag configuration for the authenticated organization; confirm target environment/project before using.",
+    annotations: { ...write }
+  },
+  {
+    flag: jsonObjectSchema.describe("Create flag request body from the each::flags API."),
+    path: external_exports.string().min(1).default("/v1/flags").describe("Create flag endpoint path.")
+  },
+  async ({ flag, path }) => text(
+    await eachRequest(normalizePath(path), {
+      method: "POST",
+      body: JSON.stringify(flag)
+    })
+  )
+);
+registerTool(
+  "eachlabs_update_flag",
+  {
+    title: "Update each::flags flag",
+    description: "Update an each::flags feature flag. This may change live routing or rollout behavior; confirm the intended environment/project before using.",
+    annotations: { ...destructive }
+  },
+  {
+    flag_key: external_exports.string().min(1).optional().describe("Feature flag key. Optional only when path is already the exact upstream endpoint."),
+    updates: jsonObjectSchema.describe("Update flag request body from the each::flags API."),
+    method: external_exports.enum(["PATCH", "PUT"]).default("PATCH"),
+    path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Update path or template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
+  },
+  async ({ flag_key, updates, method, path }) => text(
+    await eachRequest(flagPath(path, flag_key), {
+      method,
+      body: JSON.stringify(updates)
+    })
+  )
+);
+registerTool(
+  "eachlabs_delete_flag",
+  {
+    title: "Delete each::flags flag",
+    description: "Delete or archive an each::flags feature flag by key. This is a live configuration mutation and may be irreversible depending on the upstream API.",
+    annotations: { ...destructive }
+  },
+  {
+    flag_key: external_exports.string().min(1).describe("Feature flag key."),
+    path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Delete path or template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
+  },
+  async ({ flag_key, path }) => text(await eachRequest(flagPath(path, flag_key), { method: "DELETE" }))
+);
+registerTool(
   "eachlabs_list_workflow_categories",
   {
     title: "List workflow categories",
@@ -24885,7 +25028,10 @@ if (isMainModule) {
 }
 export {
   appendQuery,
+  buildFlagEvaluationBody,
   collectMediaUrls,
+  flagActionPath,
+  flagPath,
   generateExampleInput,
   joinUrl,
   summarizeJsonSchema,

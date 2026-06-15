@@ -113,6 +113,15 @@ Webhooks:
 - `eachlabs_list_webhooks`
 - `eachlabs_get_webhook`
 
+each::flags:
+
+- `eachlabs_list_flags`
+- `eachlabs_get_flag`
+- `eachlabs_evaluate_flag`
+- `eachlabs_create_flag`
+- `eachlabs_update_flag`
+- `eachlabs_delete_flag`
+
 Workflows:
 
 - `eachlabs_list_workflow_categories`
@@ -162,5 +171,7 @@ For workflows, fetch or create the workflow, trigger it, then poll with `eachlab
 The model list endpoint is public in the current API. Model details, predictions, webhooks, and workflows require `X-API-Key`; the LLM router uses `Authorization: Bearer`.
 
 The workflows API documents no `GET /workflows` list endpoint, so there is no list-workflows tool — use `eachlabs_get_workflow` with a known ID or slug, or `eachlabs_list_executions` to discover workflow IDs from past runs.
+
+The each::flags public docs were not yet visible in the docs index when this support was added, but the authenticated API surface appears under `/v1/flags`. Flags tools therefore expose `path` and `body` overrides so clients can adapt to the exact upstream contract without falling back to a fully raw request.
 
 All tools surface upstream API errors as structured tool errors (status plus the upstream payload), retry transparently on 429/transient 5xx, and time out individual HTTP requests after 60 seconds (5 minutes for chat and sense calls).

@@ -14,8 +14,12 @@ This plugin packages Codex guidance and a bundled each::labs MCP for building wi
 
 `eachlabs` combines:
 
-- official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`
-- action tools for model discovery, schemas, predictions, workflows, each::sense, and the LLM Router
+- official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`, `eachlabs_submit_docs_feedback`
+- action tools for model discovery, schema/workflow drift checks, predictions, audio, privacy-safe debug bundles, workflow linting, TypeScript/Python/Go/cURL code generation, each::sense, and the LLM Router
+
+Signed and extensionless media outputs are recognized. Inline fetches are
+HTTPS-only and reject local/private destinations and unsafe redirects. The raw
+API escape hatch also blocks unauthenticated writes.
 
 It expects an API key in the runtime environment for account actions:
 

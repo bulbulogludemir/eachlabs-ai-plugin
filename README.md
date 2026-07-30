@@ -8,8 +8,14 @@ The plugin bundles a single `eachlabs` MCP server with:
 
 - official each::labs docs proxy tools
 - model discovery and request-schema tools
+- credit-free model comparison with provider, input, and p50 latency differences
+- breaking-change detection for live model schemas and workflow definitions
 - prediction creation, polling, cancellation, and upload helpers
+- privacy-conscious usage summaries and deterministic failed-run diagnosis
+- dedicated audio transcription and speech generation tools
 - workflow creation, versioning, execution, and polling tools
+- workflow linting and TypeScript, Python, Go, or cURL integration code generation
+- safe extensionless/signed media handling and privacy-safe debug bundles
 - each::sense and each::labs LLM Router tools
 
 ## Quick Install Prompt
@@ -71,9 +77,14 @@ Claude Code prompts for the API key through plugin user configuration. You can l
 ## What You Get
 
 - One bundled `eachlabs` MCP server
-- Official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`
+- Official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`, `eachlabs_submit_docs_feedback`
 - Model search, recommendation, details, schemas, example inputs, and input validation
+- Credit-free model comparison across providers, fields, constraints, and catalog p50 latency
+- Live model-schema drift and local workflow-definition diffs
 - Prediction create, checked create, run-and-wait, status polling, and cancellation
+- Usage/cost summaries and deterministic prediction/workflow run diagnosis
+- Privacy-safe debug bundles for sharing failures without prompts, outputs, logs, or secrets
+- Audio transcription and streamed speech generation
 - Presigned upload and local file upload helpers
 - Webhook listing and webhook detail lookup
 - Workflow category listing, create, update, version upsert, execute, bulk execute, and execution polling
@@ -81,9 +92,15 @@ Claude Code prompts for the API key through plugin user configuration. You can l
 - each::sense chat completion, model listing, workflow builder, and session tools
 - each::labs LLM Router model listing and chat completions
 - Raw API request escape hatch for documented endpoints not yet wrapped
+- Guarded signed-media fetching and blocked unauthenticated raw writes
 - API health check
 - Shared each::labs skill/instructions for agent routing
 - Bundled `dist/` build, so users do not need to build the MCP after installing the plugin
+
+Public model discovery, model details, schemas, comparison, recommendation,
+validation, and code generation do not require an API key. Predictions,
+execution history, usage summaries, workflows, uploads, each::sense, and LLM
+Router calls require the user's own key.
 
 ## Included Plugin
 

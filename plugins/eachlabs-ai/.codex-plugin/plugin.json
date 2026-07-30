@@ -1,6 +1,6 @@
 {
   "name": "eachlabs-ai",
-  "version": "0.2.0",
+  "version": "0.5.0",
   "description": "Build with each::labs generative media APIs, workflows, each::sense, and the official docs MCP.",
   "author": {
     "name": "Eachlabs",
@@ -23,7 +23,7 @@
   "interface": {
     "displayName": "each::labs",
     "shortDescription": "Generative media APIs, workflows, and docs MCP",
-    "longDescription": "Use each::labs in Codex to integrate image, video, audio, 3D, LLM routing, and multi-step workflow generation. The plugin packages focused implementation guidance plus the official each::labs documentation MCP for current API lookup.",
+    "longDescription": "Use each::labs in Codex to integrate image, video, audio, 3D, LLM routing, and multi-step workflows. Compare models without spending credits, detect schema and workflow drift, generate TypeScript/Python/Go/cURL integrations, export privacy-safe debug bundles, and query current official documentation.",
     "developerName": "Eachlabs",
     "category": "Coding",
     "capabilities": [
@@ -36,6 +36,9 @@
     "defaultPrompt": [
       "Build an each::labs media generation flow",
       "Find the best each::labs model for this prompt",
+      "Compare these each::labs models without running them",
+      "Diagnose this failed each::labs run",
+      "Audit this each::labs integration for production readiness",
       "Wire each::sense into this agent"
     ],
     "brandColor": "#111827",

@@ -1,43 +1,82 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
+import {
+  DEFAULT_TIMEOUT_MS,
+  ENABLE_EXPERIMENTAL_FLAGS,
+  EACH_API_BASE_URL,
+  EACH_API_KEY,
+  EACH_SENSE_BASE_URL,
+  EACH_SENSE_V1_BASE_URL,
+  EACH_WORKFLOWS_BASE_URL,
+  MAX_AUDIO_UPLOAD_BYTES,
+  MAX_UPLOAD_BYTES,
+  MODEL_CACHE_TTL_MS,
+  PREDICTION_TERMINAL_STATUSES,
+  SERVER_VERSION,
+  UPDATE_CHECK_URL,
+  WORKFLOW_TERMINAL_STATUSES,
+} from "./config.js";
+import {
+  EachlabsError,
+  appendQuery,
+  eachRequest,
+  joinUrl,
+  requireApiKey,
+} from "./core/http.js";
+import { callOfficialDocsTool } from "./core/docs-client.js";
+import { synthesizeSpeech, transcribeAudio } from "./core/audio.js";
+import { generateIntegrationCode } from "./core/codegen.js";
+import {
+  buildDebugBundle,
+  compareModelRecords,
+  diagnoseRunRecord,
+  diffModelSchemas,
+  diffWorkflowDefinitions,
+  modelDeveloperSummary,
+  summarizeExecutions,
+} from "./core/developer-tools.js";
+import {
+  type ContentBlock,
+  collectMediaUrls,
+  mediaContentBlocks,
+} from "./core/media.js";
+import {
+  type ToolExtra,
+  pollUntilDone,
+} from "./core/polling.js";
+import {
+  generateExampleInput,
+  getRequestSchema,
+  schemaProperties,
+  summarizeJsonSchema,
+  validateAgainstSchema,
+} from "./core/schema.js";
+import { streamEachSense } from "./core/streaming.js";
+import { inferContentType, uploadFileStream } from "./core/upload.js";
+import { validateWorkflowDefinition } from "./core/workflow-validator.js";
+import { rawRequestPolicyError } from "./core/security.js";
 
-const EACH_API_BASE_URL = process.env.EACH_API_BASE_URL ?? "https://api.eachlabs.ai";
-const EACH_WORKFLOWS_BASE_URL =
-  process.env.EACH_WORKFLOWS_BASE_URL ?? "https://workflows.eachlabs.run/api/v1";
-const EACH_SENSE_BASE_URL =
-  process.env.EACH_SENSE_BASE_URL ?? "https://eachsense-agent.core.eachlabs.run";
-const EACH_SENSE_V1_BASE_URL = process.env.EACH_SENSE_V1_BASE_URL ?? `${EACH_SENSE_BASE_URL}/v1`;
-const EACH_DOCS_MCP_URL = process.env.EACH_DOCS_MCP_URL ?? "https://docs.eachlabs.ai/mcp";
-const EACH_API_KEY = process.env.EACH_API_KEY ?? process.env.EACHLABS_API_KEY;
-
-const DEFAULT_TIMEOUT_MS = 60_000;
-const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
-const MAX_EMBED_IMAGE_BYTES = 3 * 1024 * 1024;
-const MAX_MEDIA_BLOCKS = 8;
-const UPDATE_CHECK_URL =
-  "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
-const SERVER_VERSION = "0.3.1";
-
-const PREDICTION_TERMINAL_STATUSES = ["success", "failed", "cancelled"];
-const WORKFLOW_TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
-
-class EachlabsError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-    readonly payload?: unknown,
-  ) {
-    super(message);
-  }
-}
+export { appendQuery, joinUrl } from "./core/http.js";
+export { collectMediaUrls } from "./core/media.js";
+export {
+  buildDebugBundle,
+  compareModelRecords,
+  diagnoseRunRecord,
+  diffModelSchemas,
+  diffWorkflowDefinitions,
+  modelDeveloperSummary,
+  summarizeExecutions,
+} from "./core/developer-tools.js";
+export {
+  generateExampleInput,
+  summarizeJsonSchema,
+  validateAgainstSchema,
+} from "./core/schema.js";
 
 const jsonObjectSchema = z.record(z.unknown());
 const chatMessageSchema = z.object({
@@ -45,23 +84,9 @@ const chatMessageSchema = z.object({
   content: z.unknown().describe("Message content. Strings and structured multimodal content are supported."),
 });
 
-function requireApiKey(): string {
-  if (!EACH_API_KEY) {
-    throw new EachlabsError(
-      "Missing API key. Set EACH_API_KEY or EACHLABS_API_KEY before starting the MCP server.",
-    );
-  }
-  return EACH_API_KEY;
-}
-
 function compact(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
-
-type ContentBlock =
-  | { type: "text"; text: string }
-  | { type: "image"; data: string; mimeType: string }
-  | { type: "resource_link"; uri: string; name?: string; description?: string; mimeType?: string };
 
 type ToolResult = {
   content: ContentBlock[];
@@ -96,104 +121,49 @@ function passthroughMcpResult(value: unknown): ToolResult {
   return text(value);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// `new URL(path, base)` drops the base's own path (e.g. /api/v1) when path
-// starts with "/", so URLs must be joined by string concatenation instead.
-export function joinUrl(baseUrl: string, path: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
-}
-
-async function eachRequest<T>(
-  path: string,
-  options: RequestInit & {
-    baseUrl?: string;
-    auth?: boolean;
-    bearer?: boolean;
-    timeoutMs?: number;
-    retries?: number;
-  } = {},
-): Promise<T> {
-  const url = new URL(joinUrl(options.baseUrl ?? EACH_API_BASE_URL, path));
-  const headers = new Headers(options.headers);
-
-  if (options.auth !== false) {
-    if (options.bearer) {
-      headers.set("Authorization", `Bearer ${requireApiKey()}`);
-    } else {
-      headers.set("X-API-Key", requireApiKey());
-    }
-  }
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const method = (options.method ?? "GET").toUpperCase();
-  const maxAttempts = (options.retries ?? 2) + 1;
-
-  for (let attempt = 1; ; attempt++) {
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        ...options,
-        headers,
-        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-      });
-    } catch (error) {
-      if (attempt >= maxAttempts) {
-        throw new EachlabsError(
-          `Request to ${url.pathname} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      await sleep(2 ** attempt * 1000);
-      continue;
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    const payload = contentType.includes("application/json")
-      ? await response.json()
-      : await response.text();
-
-    if (!response.ok) {
-      // A 429 was never processed, so any method may retry; a 5xx may have
-      // had side effects, so only GETs retry automatically.
-      const retryable =
-        response.status === 429 || (response.status >= 500 && method === "GET");
-      if (retryable && attempt < maxAttempts) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const delaySeconds = Math.min(
-          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 2 ** attempt,
-          10,
-        );
-        await sleep(delaySeconds * 1000);
-        continue;
-      }
-      throw new EachlabsError(
-        `Eachlabs API returned HTTP ${response.status} for ${url.pathname}`,
-        response.status,
-        payload,
-      );
-    }
-
-    return payload as T;
-  }
-}
-
-export function appendQuery(path: string, params: Record<string, unknown>): string {
-  const url = new URL(path, "https://placeholder.local");
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, String(value));
-    }
-  }
-  return `${url.pathname}${url.search}`;
-}
-
 function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
+}
+
+export function workflowTriggerPath(
+  workflowId: string,
+  versionId: string,
+  bulk = false,
+): string {
+  return `/v1/workflows/${bulk ? "bulk-trigger" : "trigger"}/${encodeURIComponent(workflowId)}/${encodeURIComponent(versionId)}`;
+}
+
+export function workflowExecutionPath(executionId: string): string {
+  return `/v1/workflows/executions/${encodeURIComponent(executionId)}`;
+}
+
+async function resolveWorkflowVersionId(
+  workflowId: string,
+  requested?: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (requested) return requested;
+  const workflow = await eachRequest<Record<string, unknown>>(
+    `/workflows/${encodeURIComponent(workflowId)}`,
+    { baseUrl: EACH_WORKFLOWS_BASE_URL, signal },
+  );
+  const latest =
+    workflow.latest_version_id ??
+    (workflow.latest_version as Record<string, unknown> | undefined)?.id ??
+    (workflow.latestVersion as Record<string, unknown> | undefined)?.id;
+  if (latest) return String(latest);
+
+  const versions = Array.isArray(workflow.versions)
+    ? (workflow.versions as Array<Record<string, unknown>>)
+    : [];
+  const fallback = versions.find((version) => version.latest === true) ?? versions.at(-1);
+  const id = fallback?.id ?? fallback?.version_id;
+  if (!id) {
+    throw new EachlabsError(
+      "version_id was omitted and the workflow response did not expose a latest version ID.",
+    );
+  }
+  return String(id);
 }
 
 export function flagPath(path: string, flagKey?: string): string {
@@ -240,147 +210,11 @@ export function buildFlagEvaluationBody({
   return payload;
 }
 
-export function summarizeJsonSchema(schema: unknown): unknown {
-  if (!schema || typeof schema !== "object") return schema;
-  const candidate = schema as Record<string, unknown>;
-  const properties = candidate.properties;
-  const required = Array.isArray(candidate.required) ? candidate.required : [];
-
-  if (!properties || typeof properties !== "object") {
-    return schema;
-  }
-
-  const fields = Object.entries(properties as Record<string, Record<string, unknown>>).map(
-    ([name, field]) => ({
-      name,
-      type: field.type ?? field.anyOf ?? field.oneOf ?? "unknown",
-      required: required.includes(name),
-      description: field.description,
-      default: field.default,
-      enum: field.enum,
-      examples: field.examples ?? field.example,
-    }),
-  );
-
-  return {
-    type: candidate.type ?? "object",
-    required,
-    fields,
-  };
-}
-
-function getRequestSchema(model: Record<string, unknown>): unknown {
-  return (
-    model.request_schema ??
-    model.input_schema ??
-    model.schema ??
-    (model.latest_version as Record<string, unknown> | undefined)?.request_schema
-  );
-}
-
-function schemaProperties(schema: unknown): Record<string, Record<string, unknown>> {
-  if (!schema || typeof schema !== "object") return {};
-  const properties = (schema as Record<string, unknown>).properties;
-  if (!properties || typeof properties !== "object") return {};
-  return properties as Record<string, Record<string, unknown>>;
-}
-
-function schemaRequired(schema: unknown): string[] {
-  if (!schema || typeof schema !== "object") return [];
-  const required = (schema as Record<string, unknown>).required;
-  return Array.isArray(required) ? required.filter((field): field is string => typeof field === "string") : [];
-}
-
-function exampleForField(name: string, field: Record<string, unknown>): unknown {
-  if (Array.isArray(field.examples) && field.examples.length > 0) return field.examples[0];
-  if ("example" in field) return field.example;
-  if (Array.isArray(field.enum) && field.enum.length > 0) return field.enum[0];
-
-  const type = field.type;
-  const lowerName = name.toLowerCase();
-  const description = String(field.description ?? "").toLowerCase();
-
-  if (type === "string" || !type) {
-    if (lowerName.includes("prompt")) return "A cinematic product photo of a futuristic sneaker on a clean studio background";
-    if ("default" in field && typeof field.default === "string" && field.default !== "false") {
-      return field.default;
-    }
-    if (lowerName.includes("image") || lowerName.includes("url") || description.includes("url")) {
-      return "https://example.com/input.png";
-    }
-    if (lowerName.includes("aspect")) return "1:1";
-    if (lowerName.includes("ratio")) return "1:1";
-    return `example_${name}`;
-  }
-  if ("default" in field) return field.default;
-  if (type === "number") return field.minimum ?? 1;
-  if (type === "integer") return field.minimum ?? 1;
-  if (type === "boolean") return false;
-  if (type === "array") return [];
-  if (type === "object") return {};
-
-  return null;
-}
-
-export function generateExampleInput(schema: unknown, includeOptional: boolean, overrides: Record<string, unknown>) {
-  const properties = schemaProperties(schema);
-  const required = new Set(schemaRequired(schema));
-  const input: Record<string, unknown> = {};
-
-  for (const [name, field] of Object.entries(properties)) {
-    if (includeOptional || required.has(name)) {
-      input[name] = exampleForField(name, field);
-    }
-  }
-
-  return { ...input, ...overrides };
-}
-
-export function validateAgainstSchema(schema: unknown, input: Record<string, unknown>) {
-  const properties = schemaProperties(schema);
-  const required = schemaRequired(schema);
-  const errors: Array<{ field: string; message: string; expected?: unknown; actual?: unknown }> = [];
-  const warnings: Array<{ field: string; message: string }> = [];
-
-  for (const field of required) {
-    if (!(field in input) || input[field] === undefined || input[field] === null || input[field] === "") {
-      errors.push({ field, message: "Required field is missing or empty." });
-    }
-  }
-
-  for (const [field, value] of Object.entries(input)) {
-    const property = properties[field];
-    if (!property) {
-      warnings.push({ field, message: "Field is not present in the documented request schema." });
-      continue;
-    }
-
-    const expected = property.type;
-    const actual = Array.isArray(value) ? "array" : value === null ? "null" : typeof value;
-    if (typeof expected === "string") {
-      const normalizedExpected = expected === "integer" ? "number" : expected;
-      if (expected !== "null" && actual !== normalizedExpected) {
-        errors.push({ field, message: "Field type does not match schema.", expected, actual });
-      }
-      if (expected === "integer" && typeof value === "number" && !Number.isInteger(value)) {
-        errors.push({ field, message: "Field must be an integer.", expected, actual });
-      }
-    }
-
-    if (Array.isArray(property.enum) && !property.enum.includes(value as never)) {
-      errors.push({ field, message: "Field is not one of the documented enum values.", expected: property.enum, actual: value });
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
-  };
-}
-
 let modelCache:
   | { models: Array<Record<string, unknown>>; complete: boolean; fetchedAt: number }
+  | undefined;
+let modelFetchPromise:
+  | Promise<{ models: Array<Record<string, unknown>>; complete: boolean }>
   | undefined;
 
 async function getAllModels(maxModels: number): Promise<Array<Record<string, unknown>>> {
@@ -393,44 +227,70 @@ async function getAllModels(maxModels: number): Promise<Array<Record<string, unk
     return cached.models.slice(0, maxModels);
   }
 
-  const pageSize = 100;
-  const models: Array<Record<string, unknown>> = [];
-  let complete = false;
+  modelFetchPromise ??= (async () => {
+    const pageSize = 100;
+    const models: Array<Record<string, unknown>> = [];
+    let complete = false;
 
-  for (let offset = 0; models.length < maxModels; offset += pageSize) {
-    const page = await eachRequest<unknown>(appendQuery("/v1/models", { limit: pageSize, offset }), {
-      auth: false,
-    });
-    if (!Array.isArray(page) || page.length === 0) {
-      complete = true;
-      break;
+    for (let offset = 0; models.length < maxModels; offset += pageSize) {
+      const page = await eachRequest<unknown>(
+        appendQuery("/v1/models", { limit: pageSize, offset }),
+        { auth: false },
+      );
+      const pageItems = Array.isArray(page)
+        ? page
+        : page &&
+            typeof page === "object" &&
+            Array.isArray((page as { items?: unknown }).items)
+          ? (page as { items: Array<Record<string, unknown>> }).items
+          : [];
+      if (pageItems.length === 0) {
+        complete = true;
+        break;
+      }
+      models.push(...pageItems);
+      if (pageItems.length < pageSize) {
+        complete = true;
+        break;
+      }
     }
-    models.push(...(page as Array<Record<string, unknown>>));
-    if (page.length < pageSize) {
-      complete = true;
-      break;
-    }
+
+    return { models, complete };
+  })();
+
+  let result: { models: Array<Record<string, unknown>>; complete: boolean };
+  try {
+    result = await modelFetchPromise;
+  } finally {
+    modelFetchPromise = undefined;
   }
-
-  modelCache = { models, complete, fetchedAt: Date.now() };
-  return models.slice(0, maxModels);
+  modelCache = { ...result, fetchedAt: Date.now() };
+  if (!result.complete && result.models.length < maxModels) {
+    return getAllModels(maxModels);
+  }
+  return result.models.slice(0, maxModels);
 }
 
 export function trimModel(model: Record<string, unknown>) {
-  return {
-    title: model.title,
-    slug: model.slug,
-    version: model.version,
-    output_type: model.output_type,
-    request_fields: Object.keys(schemaProperties(getRequestSchema(model))),
-  };
+  return modelDeveloperSummary(model);
 }
 
 function scoreModel(model: Record<string, unknown>, terms: string[], requiredFields: string[], outputType?: string) {
   const title = String(model.title ?? "").toLowerCase();
   const slug = String(model.slug ?? "").toLowerCase();
-  const provider = String(model.provider ?? "").toLowerCase();
-  const haystack = `${title} ${slug} ${provider}`;
+  const provider = String(model.provider_name ?? model.provider ?? "").toLowerCase();
+  const description = String(model.description ?? "").toLowerCase();
+  const category =
+    model.category && typeof model.category === "object"
+      ? String(
+          (model.category as Record<string, unknown>).slug ??
+            (model.category as Record<string, unknown>).Slug ??
+            (model.category as Record<string, unknown>).name ??
+            (model.category as Record<string, unknown>).Name ??
+            "",
+        ).toLowerCase()
+      : String(model.category ?? "").toLowerCase();
+  const haystack = `${title} ${slug} ${provider} ${category} ${description}`;
   const schema = getRequestSchema(model);
   const fields = new Set(Object.keys(schemaProperties(schema)));
   let score = 0;
@@ -455,96 +315,10 @@ function scoreModel(model: Record<string, unknown>, terms: string[], requiredFie
 }
 
 async function getModelBySlug(slug: string): Promise<Record<string, unknown>> {
-  return eachRequest<Record<string, unknown>>(appendQuery("/v1/model", { slug }));
-}
-
-async function callOfficialDocsTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-  const client = new Client({ name: "eachlabs-unofficial-docs-proxy", version: "0.2.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(EACH_DOCS_MCP_URL));
-
-  try {
-    await client.connect(transport);
-    return await client.callTool({ name, arguments: args });
-  } finally {
-    await client.close().catch(() => undefined);
-  }
-}
-
-const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-  gif: "image/gif",
-};
-const MEDIA_MIME_BY_EXTENSION: Record<string, string> = {
-  ...IMAGE_MIME_BY_EXTENSION,
-  mp4: "video/mp4",
-  webm: "video/webm",
-  mov: "video/quicktime",
-  mp3: "audio/mpeg",
-  wav: "audio/wav",
-  ogg: "audio/ogg",
-  flac: "audio/flac",
-  m4a: "audio/mp4",
-};
-
-function urlExtension(url: string): string {
-  try {
-    const pathname = new URL(url).pathname;
-    const dot = pathname.lastIndexOf(".");
-    return dot === -1 ? "" : pathname.slice(dot + 1).toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-export function collectMediaUrls(value: unknown, found: string[] = []): string[] {
-  if (typeof value === "string") {
-    if (/^https?:\/\//.test(value) && MEDIA_MIME_BY_EXTENSION[urlExtension(value)]) {
-      found.push(value);
-    }
-  } else if (Array.isArray(value)) {
-    for (const item of value) collectMediaUrls(item, found);
-  } else if (value && typeof value === "object") {
-    for (const item of Object.values(value)) collectMediaUrls(item, found);
-  }
-  return found;
-}
-
-async function mediaContentBlocks(output: unknown, embedImages: boolean): Promise<ContentBlock[]> {
-  const urls = [...new Set(collectMediaUrls(output))].slice(0, MAX_MEDIA_BLOCKS);
-  const blocks: ContentBlock[] = [];
-
-  for (const url of urls) {
-    const extension = urlExtension(url);
-    const imageMime = IMAGE_MIME_BY_EXTENSION[extension];
-
-    if (imageMime && embedImages) {
-      try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-        const declaredLength = Number(response.headers.get("content-length"));
-        if (response.ok && (!Number.isFinite(declaredLength) || declaredLength <= MAX_EMBED_IMAGE_BYTES)) {
-          const buffer = Buffer.from(await response.arrayBuffer());
-          if (buffer.byteLength <= MAX_EMBED_IMAGE_BYTES) {
-            blocks.push({ type: "image", data: buffer.toString("base64"), mimeType: imageMime });
-            continue;
-          }
-        }
-      } catch {
-        // fall through to a link block
-      }
-    }
-
-    blocks.push({
-      type: "resource_link",
-      uri: url,
-      name: decodeURIComponent(url.split("/").pop() ?? url).split("?")[0],
-      mimeType: MEDIA_MIME_BY_EXTENSION[extension],
-    });
-  }
-
-  return blocks;
+  return eachRequest<Record<string, unknown>>(
+    appendQuery("/v1/model", { slug }),
+    { auth: false },
+  );
 }
 
 async function predictionToolResult(
@@ -562,163 +336,6 @@ async function predictionToolResult(
   return media.length > 0 ? { content: [...base.content, ...media] } : base;
 }
 
-// Subset of the SDK's RequestHandlerExtra that the poll helper relies on.
-type ToolExtra = {
-  signal?: AbortSignal;
-  _meta?: { progressToken?: string | number };
-  sendNotification?: (notification: {
-    method: "notifications/progress";
-    params: { progressToken: string | number; progress: number; total?: number; message?: string };
-  }) => Promise<void>;
-};
-
-async function pollUntilDone(
-  fetchCurrent: () => Promise<Record<string, unknown>>,
-  terminalStatuses: string[],
-  timeoutSeconds: number,
-  pollIntervalSeconds: number,
-  extra?: ToolExtra,
-): Promise<{ completed: boolean; last?: Record<string, unknown> }> {
-  const deadline = Date.now() + timeoutSeconds * 1000;
-  let last: Record<string, unknown> | undefined;
-
-  while (Date.now() <= deadline) {
-    if (extra?.signal?.aborted) break;
-    last = await fetchCurrent();
-    const status = String(last.status ?? "").toLowerCase();
-    if (terminalStatuses.includes(status)) {
-      return { completed: true, last };
-    }
-
-    const progressToken = extra?._meta?.progressToken;
-    if (progressToken !== undefined && extra?.sendNotification) {
-      const elapsedSeconds = Math.round(timeoutSeconds - (deadline - Date.now()) / 1000);
-      await extra
-        .sendNotification({
-          method: "notifications/progress",
-          params: { progressToken, progress: elapsedSeconds, total: timeoutSeconds, message: status },
-        })
-        .catch(() => undefined);
-    }
-
-    await sleep(pollIntervalSeconds * 1000);
-  }
-
-  return { completed: false, last };
-}
-
-// Consumes an SSE response server-side: concatenates OpenAI-style text deltas,
-// keeps non-delta events (status, generation_response, complete, ...), and
-// bridges them to MCP progress notifications. Falls back to plain JSON when
-// the upstream answers without text/event-stream.
-async function eachRequestStreaming(
-  path: string,
-  options: { baseUrl: string; body: string; timeoutMs?: number },
-  extra?: ToolExtra,
-): Promise<unknown> {
-  const url = new URL(joinUrl(options.baseUrl, path));
-  const headers = new Headers({
-    "X-API-Key": requireApiKey(),
-    "Content-Type": "application/json",
-    Accept: "text/event-stream, application/json",
-  });
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: options.body,
-    signal: AbortSignal.timeout(options.timeoutMs ?? 300_000),
-  });
-
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (!response.ok) {
-    const payload = contentType.includes("application/json")
-      ? await response.json()
-      : await response.text();
-    throw new EachlabsError(
-      `Eachlabs API returned HTTP ${response.status} for ${url.pathname}`,
-      response.status,
-      payload,
-    );
-  }
-
-  if (!contentType.includes("text/event-stream") || !response.body) {
-    return contentType.includes("application/json") ? response.json() : response.text();
-  }
-
-  const progressToken = extra?._meta?.progressToken;
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let textOut = "";
-  let eventCount = 0;
-  const events: unknown[] = [];
-
-  const handleData = async (data: string) => {
-    if (data === "[DONE]") return;
-    let event: unknown;
-    try {
-      event = JSON.parse(data);
-    } catch {
-      events.push(data);
-      return;
-    }
-    eventCount++;
-
-    const record = event as Record<string, any>;
-    const delta = record?.choices?.[0]?.delta;
-    if (typeof delta?.content === "string") textOut += delta.content;
-
-    // Keep everything that is not a plain text/thinking delta chunk.
-    const extension = record?.eachlabs ?? record?.choices?.[0]?.delta?.eachlabs;
-    const extensionType = String(extension?.type ?? record?.type ?? "");
-    const isDeltaChunk =
-      typeof delta?.content === "string" || extensionType.includes("delta");
-    if (!isDeltaChunk && events.length < 100) {
-      events.push(extension ?? event);
-    }
-
-    if (progressToken !== undefined && extra?.sendNotification && !isDeltaChunk) {
-      await extra
-        .sendNotification({
-          method: "notifications/progress",
-          params: {
-            progressToken,
-            progress: eventCount,
-            message: extensionType || "streaming",
-          },
-        })
-        .catch(() => undefined);
-    }
-  };
-
-  while (true) {
-    if (extra?.signal?.aborted) {
-      await reader.cancel().catch(() => undefined);
-      break;
-    }
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    let newline;
-    while ((newline = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, newline).trim();
-      buffer = buffer.slice(newline + 1);
-      if (line.startsWith("data:")) {
-        await handleData(line.slice(5).trim());
-      }
-    }
-  }
-
-  return {
-    streamed: true,
-    text: textOut || undefined,
-    events,
-    event_count: eventCount,
-  };
-}
 
 const server = new McpServer(
   {
@@ -730,6 +347,9 @@ const server = new McpServer(
       "Unofficial MCP server for the each::labs platform (models, predictions, workflows, each::sense, LLM router).",
       "Typical model-run flow: eachlabs_search_models -> eachlabs_get_model_request_schema -> eachlabs_create_prediction (mode 'wait' for short jobs, 'async' + eachlabs_get_prediction for long ones).",
       "Media inputs must be URLs; upload local files first with eachlabs_upload_file.",
+      "Dedicated audio APIs are available through eachlabs_audio_transcribe and eachlabs_audio_speech.",
+      "Developer helpers can diff live model schemas and workflow definitions, generate Go/TypeScript/Python/cURL integrations, and export privacy-safe debug bundles.",
+      "Undocumented each::flags tools are experimental and only registered when EACHLABS_ENABLE_EXPERIMENTAL_FLAGS=1.",
       "Requires EACH_API_KEY (or EACHLABS_API_KEY) in the environment for everything except the public model catalog and docs search.",
     ].join("\n"),
   },
@@ -762,6 +382,8 @@ function registerTool(
             error: error.message,
             status: error.status ?? null,
             upstream: error.payload ?? null,
+            ambiguous_write: error.ambiguousWrite || undefined,
+            request: error.requestMetadata,
           });
         }
         return errorText({
@@ -804,6 +426,24 @@ registerTool(
   },
   async ({ command }) =>
     passthroughMcpResult(await callOfficialDocsTool("query_docs_filesystem_each_labs", { command })),
+);
+
+registerTool(
+  "eachlabs_submit_docs_feedback",
+  {
+    title: "Submit each::labs docs feedback",
+    description:
+      "Submit focused feedback about an official each::labs documentation page through the official docs MCP.",
+    annotations: { ...write, idempotentHint: false },
+  },
+  {
+    path: z.string().min(1).describe("Documentation path the feedback applies to."),
+    feedback: z.string().min(1).describe("Specific correction or improvement request."),
+  },
+  async ({ path, feedback }) =>
+    passthroughMcpResult(
+      await callOfficialDocsTool("submit_feedback", { path, feedback }),
+    ),
 );
 
 // --- Model catalog and schemas -----------------------------------------------
@@ -870,7 +510,10 @@ registerTool(
     if (openapi) {
       return text({
         slug,
-        openapi_schema: await eachRequest(`/v1/models/${slug}/schemas/openapi`),
+        openapi_schema: await eachRequest(
+          `/v1/models/${encodeURIComponent(slug)}/schemas/openapi`,
+          { auth: false },
+        ),
       });
     }
 
@@ -959,9 +602,21 @@ registerTool(
         const fields = new Set(Object.keys(schemaProperties(schema)));
         const title = String(model.title ?? "").toLowerCase();
         const slug = String(model.slug ?? "").toLowerCase();
-        const provider = String(model.provider ?? "").toLowerCase();
+        const provider = String(model.provider_name ?? model.provider ?? "").toLowerCase();
+        const description = String(model.description ?? "").toLowerCase();
+        const category =
+          model.category && typeof model.category === "object"
+            ? JSON.stringify(model.category).toLowerCase()
+            : String(model.category ?? "").toLowerCase();
 
-        if (queryLower && !`${title} ${slug} ${provider}`.includes(queryLower)) return false;
+        if (
+          queryLower &&
+          !`${title} ${slug} ${provider} ${description} ${category}`.includes(
+            queryLower,
+          )
+        ) {
+          return false;
+        }
         if (output_type && !String(model.output_type ?? "").toLowerCase().includes(output_type.toLowerCase())) {
           return false;
         }
@@ -1015,6 +670,176 @@ registerTool(
   },
 );
 
+registerTool(
+  "eachlabs_compare_models",
+  {
+    title: "Compare models without running them",
+    description:
+      "Compare 2-10 live catalog models by provider, category, p50 latency, required inputs, field constraints, and capability fit. Read-only and does not spend credits.",
+    annotations: { ...readOnly },
+  },
+  {
+    models: z
+      .array(z.string().min(1))
+      .min(2)
+      .max(10)
+      .describe("Model slugs to compare."),
+    required_fields: z
+      .array(z.string())
+      .default([])
+      .describe("Input fields every suitable model must support."),
+    focus_fields: z
+      .array(z.string())
+      .default([])
+      .describe("Extra fields to include in the compact constraint matrix."),
+  },
+  async ({ models, required_fields, focus_fields }) => {
+    const uniqueModels = [...new Set(models as string[])];
+    const settled = await Promise.allSettled(
+      uniqueModels.map((slug) => getModelBySlug(slug)),
+    );
+    const loaded: Array<Record<string, unknown>> = [];
+    const errors: Array<{ slug: string; error: string }> = [];
+
+    for (const [index, result] of settled.entries()) {
+      if (result.status === "fulfilled") {
+        loaded.push(result.value);
+      } else {
+        errors.push({
+          slug: uniqueModels[index],
+          error:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
+        });
+      }
+    }
+
+    if (loaded.length < 2) {
+      return errorText({
+        compared: false,
+        error: "At least two model records must be loaded for comparison.",
+        model_errors: errors,
+      });
+    }
+    return text({
+      ...compareModelRecords(loaded, required_fields, focus_fields),
+      model_errors: errors,
+    });
+  },
+);
+
+registerTool(
+  "eachlabs_diff_model_schema",
+  {
+    title: "Diff a live model schema",
+    description:
+      "Compare a saved baseline request schema with the model's current live schema. Classifies removed fields, new required fields, narrowed enums, type changes, and tighter constraints as potentially breaking. Does not run a prediction.",
+    annotations: { ...readOnly },
+  },
+  {
+    model: z.string().min(1).describe("Live EachLabs model slug."),
+    baseline_schema: jsonObjectSchema.describe(
+      "Previously saved request_schema to compare against the current live schema.",
+    ),
+  },
+  async ({ model, baseline_schema }) => {
+    const details = await getModelBySlug(model);
+    const current = getRequestSchema(details);
+    if (!current || typeof current !== "object") {
+      return errorText({
+        compared: false,
+        error: `Model '${model}' has no live request schema.`,
+      });
+    }
+    return text({
+      model,
+      ...diffModelSchemas(baseline_schema, current),
+      current_schema: current,
+    });
+  },
+);
+
+registerTool(
+  "eachlabs_diff_workflow",
+  {
+    title: "Diff workflow definitions",
+    description:
+      "Compare two workflow definitions locally before publishing a version. Highlights added/removed steps, model/type changes, parameter changes, and input-schema compatibility. Does not mutate or execute a workflow.",
+    annotations: { ...readOnly },
+  },
+  {
+    before_definition: jsonObjectSchema,
+    after_definition: jsonObjectSchema,
+  },
+  async ({ before_definition, after_definition }) =>
+    text(diffWorkflowDefinitions(before_definition, after_definition)),
+);
+
+registerTool(
+  "eachlabs_generate_integration_code",
+  {
+    title: "Generate model integration code",
+    description:
+      "Generate deterministic TypeScript, Python, Go, or cURL integration code from the model's current live request schema. Static model/version tables are never used.",
+    annotations: { ...readOnly },
+  },
+  {
+    model: z.string().min(1).describe("Live EachLabs model slug."),
+    language: z.enum(["typescript", "python", "go", "curl"]),
+    mode: z
+      .enum(["async_polling", "webhook", "synchronous"])
+      .default("async_polling"),
+    framework: z
+      .enum(["none", "express", "nextjs", "fastapi", "flask"])
+      .default("none")
+      .describe("Optional webhook-handler framework."),
+    include_types: z.boolean().default(true),
+    include_zod: z
+      .boolean()
+      .default(false)
+      .describe("TypeScript only. Generate a Zod input validator."),
+  },
+  async ({ model, language, mode, framework, include_types, include_zod }) => {
+    const validFramework =
+      framework === "none" ||
+      (language === "typescript" &&
+        ["express", "nextjs"].includes(framework)) ||
+      (language === "python" && ["fastapi", "flask"].includes(framework));
+    if (!validFramework) {
+      return errorText({
+        generated: false,
+        error: `Framework '${framework}' is not compatible with language '${language}'.`,
+      });
+    }
+    if (framework !== "none" && mode !== "webhook") {
+      return errorText({
+        generated: false,
+        error: "A framework handler is only generated in webhook mode.",
+      });
+    }
+    const details = await getModelBySlug(model);
+    const schema = getRequestSchema(details);
+    if (!schema || typeof schema !== "object") {
+      return errorText({
+        generated: false,
+        error: `Model '${model}' has no live request schema.`,
+      });
+    }
+    return text(
+      generateIntegrationCode({
+        model,
+        schema: schema as Record<string, unknown>,
+        language,
+        mode,
+        framework,
+        includeTypes: include_types,
+        includeZod: include_zod,
+      }),
+    );
+  },
+);
+
 // --- Predictions ---------------------------------------------------------------
 
 registerTool(
@@ -1036,7 +861,12 @@ registerTool(
       .default(true)
       .describe("Validate input against the model request_schema before creating. Skipped if no schema is documented."),
     webhook_url: z.string().url().optional(),
-    webhook_secret: z.string().optional().describe("HMAC-SHA256 secret used to sign webhook deliveries."),
+    webhook_secret: z
+      .string()
+      .optional()
+      .describe(
+        "Shared secret delivered verbatim in X-Webhook-Secret. Verify it with a constant-time string comparison; it is not an HMAC body signature.",
+      ),
     timeout_seconds: z.number().int().min(1).max(1800).default(300).describe("Only used for mode 'wait' and 'sync'."),
     poll_interval_seconds: z.number().min(0.5).max(30).default(3).describe("Only used for mode 'wait'."),
     include_media: z
@@ -1100,14 +930,14 @@ registerTool(
       return text({ created, warning: "Prediction response did not include a prediction ID; cannot wait." });
     }
 
-    const { completed, last } = await pollUntilDone(
-      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${predictionId}`),
+    const { completed, cancelled, last } = await pollUntilDone(
+      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${predictionId}`, { signal: extra?.signal }),
       PREDICTION_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra,
     );
-    if (!completed) return text({ created, status: "timeout", last });
+    if (!completed) return text({ created, status: cancelled ? "cancelled_by_client" : "timeout", last });
     return predictionToolResult({ created, final: last }, last, include_media, embed_images);
   },
 );
@@ -1136,18 +966,20 @@ registerTool(
   },
   async ({ prediction_id, wait, timeout_seconds, poll_interval_seconds, include_media, embed_images }, extra) => {
     if (!wait) {
-      const prediction = await eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`);
+      const prediction = await eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`, {
+        signal: extra?.signal,
+      });
       return predictionToolResult(prediction, prediction, include_media, embed_images);
     }
 
-    const { completed, last } = await pollUntilDone(
-      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`),
+    const { completed, cancelled, last } = await pollUntilDone(
+      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`, { signal: extra?.signal }),
       PREDICTION_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra,
     );
-    if (!completed) return text({ status: "timeout", prediction_id, last });
+    if (!completed) return text({ status: cancelled ? "cancelled_by_client" : "timeout", prediction_id, last });
     return predictionToolResult(last, last, include_media, embed_images);
   },
 );
@@ -1178,18 +1010,283 @@ registerTool(
     limit: z.number().int().min(1).max(100).default(20),
     offset: z.number().int().min(0).default(0),
     model: z.string().optional().describe("Filter by model slug."),
-    status: z.string().optional().describe("Comma-separated statuses, e.g. success,failed."),
+    status: z
+      .string()
+      .optional()
+      .describe("Comma-separated statuses: created, starting, success, error."),
+    error_classification: z
+      .array(
+        z.enum([
+          "content_moderation",
+          "execution_timeout",
+          "invalid_user_input",
+          "invalid_model_config",
+          "provider_auth",
+          "provider_error",
+          "provider_rate_limit",
+          "provider_unavailable",
+          "internal_error",
+          "unknown",
+        ]),
+      )
+      .optional()
+      .describe("Filter failed executions by one or more canonical error classifications."),
     workflow_id: z.string().optional(),
     workflow_execution_id: z.string().optional(),
     from: z.string().optional().describe("RFC 3339 start of time window, e.g. 2026-06-01T00:00:00Z."),
     to: z.string().optional().describe("RFC 3339 end of time window."),
   },
-  async ({ limit, offset, model, status, workflow_id, workflow_execution_id, from, to }) =>
+  async ({ limit, offset, model, status, error_classification, workflow_id, workflow_execution_id, from, to }) =>
     text(
       await eachRequest(
-        appendQuery("/v1/executions", { limit, offset, model, status, workflow_id, workflow_execution_id, from, to }),
+        appendQuery("/v1/executions", {
+          limit,
+          offset,
+          model,
+          status,
+          error_classification: error_classification?.join(","),
+          workflow_id,
+          workflow_execution_id,
+          from,
+          to,
+        }),
       ),
     ),
+);
+
+registerTool(
+  "eachlabs_summarize_usage",
+  {
+    title: "Summarize usage and cost",
+    description:
+      "Summarize authenticated execution history without returning prompts or outputs. Groups spend, runtime, success, and failure counts by model, workflow, or status.",
+    annotations: { ...readOnly },
+  },
+  {
+    max_records: z.number().int().min(1).max(500).default(100),
+    offset: z.number().int().min(0).default(0),
+    group_by: z.enum(["model", "workflow", "status"]).default("model"),
+    top: z.number().int().min(1).max(50).default(10),
+    model: z.string().optional(),
+    status: z
+      .string()
+      .optional()
+      .describe("Comma-separated statuses: created, starting, success, error."),
+    workflow_id: z.string().optional(),
+    from: z.string().optional().describe("RFC 3339 start of time window."),
+    to: z.string().optional().describe("RFC 3339 end of time window."),
+  },
+  async ({
+    max_records,
+    offset,
+    group_by,
+    top,
+    model,
+    status,
+    workflow_id,
+    from,
+    to,
+  }) => {
+    const executions: Array<Record<string, unknown>> = [];
+    let nextOffset = offset;
+    let upstreamTotal: number | undefined;
+
+    while (executions.length < max_records) {
+      const limit = Math.min(100, max_records - executions.length);
+      const response = await eachRequest<unknown>(
+        appendQuery("/v1/executions", {
+          limit,
+          offset: nextOffset,
+          model,
+          status,
+          workflow_id,
+          from,
+          to,
+        }),
+      );
+      const page = Array.isArray(response)
+        ? (response as Array<Record<string, unknown>>)
+        : response &&
+            typeof response === "object" &&
+            Array.isArray(
+              (response as { executions?: unknown }).executions,
+            )
+          ? (
+              response as {
+                executions: Array<Record<string, unknown>>;
+              }
+            ).executions
+          : [];
+      if (
+        response &&
+        typeof response === "object" &&
+        Number.isFinite(
+          Number((response as { total_count?: unknown }).total_count),
+        )
+      ) {
+        upstreamTotal = Number(
+          (response as { total_count?: unknown }).total_count,
+        );
+      }
+      executions.push(...page);
+      nextOffset += page.length;
+      if (
+        page.length < limit ||
+        (upstreamTotal !== undefined &&
+          nextOffset >= upstreamTotal)
+      ) {
+        break;
+      }
+    }
+
+    return text({
+      ...summarizeExecutions(executions, group_by, top),
+      requested_offset: offset,
+      upstream_total_count: upstreamTotal ?? null,
+      sampled_all_matching:
+        upstreamTotal === undefined
+          ? executions.length < max_records
+          : offset + executions.length >= upstreamTotal,
+    });
+  },
+);
+
+registerTool(
+  "eachlabs_diagnose_run",
+  {
+    title: "Diagnose a failed run",
+    description:
+      "Fetch a prediction or workflow execution and return deterministic local triage with safe retry guidance. Does not create or retry work.",
+    annotations: { ...readOnly },
+  },
+  {
+    kind: z.enum(["prediction", "workflow"]),
+    run_id: z.string().min(1),
+    include_raw: z
+      .boolean()
+      .default(false)
+      .describe(
+        "Include the full upstream run record, which may contain prompts, outputs, or logs.",
+      ),
+  },
+  async ({ kind, run_id, include_raw }) => {
+    const run =
+      kind === "workflow"
+        ? await eachRequest<Record<string, unknown>>(
+            workflowExecutionPath(run_id),
+          )
+        : await eachRequest<Record<string, unknown>>(
+            `/v1/prediction/${encodeURIComponent(run_id)}`,
+          );
+    return text({
+      kind,
+      run_id,
+      ...diagnoseRunRecord(run),
+      ...(include_raw ? { raw: run } : {}),
+    });
+  },
+);
+
+registerTool(
+  "eachlabs_export_debug_bundle",
+  {
+    title: "Export privacy-safe debug bundle",
+    description:
+      "Fetch a prediction or workflow execution and return a shareable diagnostic bundle. Prompts, inputs, outputs, logs, media URLs, credentials, secrets, and tokens are excluded.",
+    annotations: { ...readOnly },
+  },
+  {
+    kind: z.enum(["prediction", "workflow"]),
+    run_id: z.string().min(1),
+  },
+  async ({ kind, run_id }) => {
+    const run =
+      kind === "workflow"
+        ? await eachRequest<Record<string, unknown>>(
+            workflowExecutionPath(run_id),
+          )
+        : await eachRequest<Record<string, unknown>>(
+            `/v1/prediction/${encodeURIComponent(run_id)}`,
+          );
+    return text(buildDebugBundle(kind, run, SERVER_VERSION));
+  },
+);
+
+// --- Audio ---------------------------------------------------------------------
+
+registerTool(
+  "eachlabs_audio_transcribe",
+  {
+    title: "Transcribe audio",
+    description:
+      "Transcribe a local audio file through POST /v1/audio/transcriptions. Files are sent as multipart form data and must be 25 MB or smaller.",
+    annotations: { ...write },
+  },
+  {
+    file_path: z.string().min(1).describe("Absolute path to a local audio file."),
+    model: z.string().min(1).default("openai/whisper-large-v3"),
+    language: z.string().min(2).optional().describe("Optional language code."),
+    response_format: z.enum(["json", "verbose_json"]).default("json"),
+    timestamp_granularities: z
+      .array(z.enum(["word", "segment"]))
+      .max(2)
+      .optional()
+      .describe("Timestamp detail; use verbose_json when requesting timestamps."),
+  },
+  async (
+    { file_path, model, language, response_format, timestamp_granularities },
+    extra,
+  ) =>
+    text(
+      await transcribeAudio(
+        {
+          filePath: file_path,
+          model,
+          language,
+          responseFormat: response_format,
+          timestampGranularities: timestamp_granularities,
+        },
+        extra?.signal,
+      ),
+    ),
+);
+
+registerTool(
+  "eachlabs_audio_speech",
+  {
+    title: "Generate speech audio",
+    description:
+      "Generate speech through POST /v1/audio/speech and return the streamed MP3 or PCM response as an MCP audio block.",
+    annotations: { ...write },
+  },
+  {
+    model: z.string().min(1),
+    input: z.string().min(1).max(2000),
+    voice: z.string().min(1),
+    format: z.enum(["mp3", "pcm"]).default("mp3"),
+    speed: z.number().min(0.25).max(4).optional(),
+    instructions: z.string().max(1000).optional(),
+  },
+  async ({ model, input, voice, format, speed, instructions }, extra) => {
+    const audio = await synthesizeSpeech(
+      { model, input, voice, format, speed, instructions },
+      extra?.signal,
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: compact({
+            generated: true,
+            execution_id: audio.executionId,
+            request_id: audio.requestId,
+            mime_type: audio.mimeType,
+          }),
+        },
+        { type: "audio", data: audio.data, mimeType: audio.mimeType },
+      ],
+    };
+  },
 );
 
 // --- Storage -------------------------------------------------------------------
@@ -1205,7 +1302,7 @@ registerTool(
   {
     content_type: z.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
     file_type: z.enum(["image", "video", "audio", "other"]).default("other"),
-    expires_in_seconds: z.number().int().min(1).optional().describe("Optional retention control for the stored file."),
+    expires_in_seconds: z.number().int().min(60).max(31_536_000).optional().describe("Optional retention control for the stored file."),
   },
   async ({ content_type, file_type, expires_in_seconds }) =>
     text(
@@ -1226,12 +1323,20 @@ registerTool(
   },
   {
     file_path: z.string().min(1).describe("Absolute local file path."),
-    content_type: z.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
+    content_type: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Optional MIME type. Inferred from the file signature or extension when omitted."),
     file_type: z.enum(["image", "video", "audio", "other"]).default("other"),
-    expires_in_seconds: z.number().int().min(1).optional().describe("Optional retention control for the stored file."),
+    expires_in_seconds: z.number().int().min(60).max(31_536_000).optional().describe("Optional retention control for the stored file."),
+    timeout_seconds: z.number().int().min(10).max(600).default(120),
   },
-  async ({ file_path, content_type, file_type, expires_in_seconds }) => {
+  async ({ file_path, content_type, file_type, expires_in_seconds, timeout_seconds }, extra) => {
     const info = await stat(file_path);
+    if (!info.isFile()) {
+      return errorText({ uploaded: false, error: "file_path must point to a regular file." });
+    }
     if (info.size > MAX_UPLOAD_BYTES) {
       return errorText({
         uploaded: false,
@@ -1239,9 +1344,11 @@ registerTool(
       });
     }
 
+    const resolvedContentType = await inferContentType(file_path, content_type);
     const presign = await eachRequest<Record<string, unknown>>("/v1/upload/presign", {
       method: "POST",
-      body: JSON.stringify({ content_type, file_type, expires_in_seconds }),
+      body: JSON.stringify({ content_type: resolvedContentType, file_type, expires_in_seconds }),
+      signal: extra?.signal,
     });
     const presignedUrl = String(presign.presigned_url ?? "");
     if (!presignedUrl) {
@@ -1252,14 +1359,14 @@ registerTool(
       presign.required_headers && typeof presign.required_headers === "object"
         ? (presign.required_headers as Record<string, string>)
         : {};
-    const bytes = await readFile(file_path);
-    const uploadResponse = await fetch(presignedUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": content_type,
-        ...requiredHeaders,
-      },
-      body: bytes,
+    const uploadResponse = await uploadFileStream({
+      url: presignedUrl,
+      filePath: file_path,
+      contentType: resolvedContentType,
+      requiredHeaders,
+      size: info.size,
+      timeoutMs: timeout_seconds * 1000,
+      extra,
     });
 
     if (!uploadResponse.ok) {
@@ -1328,6 +1435,7 @@ registerTool(
 
 // --- each::flags --------------------------------------------------------------------
 
+if (ENABLE_EXPERIMENTAL_FLAGS) {
 registerTool(
   "eachlabs_list_flags",
   {
@@ -1475,8 +1583,39 @@ registerTool(
   async ({ flag_key, path }) =>
     text(await eachRequest(flagPath(path, flag_key), { method: "DELETE" })),
 );
+}
 
 // --- Workflows ---------------------------------------------------------------------
+
+registerTool(
+  "eachlabs_validate_workflow_definition",
+  {
+    title: "Validate workflow definition",
+    description:
+      "Lint a workflow definition before mutation. Checks step IDs/types, JSON Schema, references, branches, choices, version consistency, retry/timeout bounds, and optionally live model schemas.",
+    annotations: { ...readOnly },
+  },
+  {
+    definition: jsonObjectSchema,
+    expected_version: z.string().min(1).optional(),
+    mode: z
+      .enum(["structural", "live"])
+      .default("live")
+      .describe("Live mode also resolves every model and validates its params against the current request schema."),
+    policy_checks: z
+      .boolean()
+      .default(false)
+      .describe("Optional static warnings for inline secrets and plain-HTTP endpoints; no external security scan is run."),
+  },
+  async ({ definition, expected_version, mode, policy_checks }) =>
+    text(
+      await validateWorkflowDefinition(definition, {
+        expectedVersion: expected_version,
+        modelResolver: mode === "live" ? getModelBySlug : undefined,
+        policyChecks: policy_checks,
+      }),
+    ),
+);
 
 registerTool(
   "eachlabs_list_workflow_categories",
@@ -1498,17 +1637,47 @@ registerTool(
   },
   {
     workflow: jsonObjectSchema.describe(
-      "CreateWorkflowRequest body from the each::workflows API, including name, description, categories, and definition.",
+      "Current CreateWorkflowRequest body: name plus an optional definition. Other metadata fields are not accepted by the current route.",
     ),
+    validate_definition: z.boolean().default(true),
+    validation_mode: z.enum(["structural", "live"]).default("live"),
+    policy_checks: z.boolean().default(false),
   },
-  async ({ workflow }) =>
-    text(
-      await eachRequest("/workflows", {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+  async ({ workflow, validate_definition, validation_mode, policy_checks }) => {
+    const unsupportedFields = Object.keys(workflow).filter(
+      (field) => !["name", "definition"].includes(field),
+    );
+    if (typeof workflow.name !== "string" || !workflow.name.trim()) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation requires a non-empty name.",
+      });
+    }
+    if (unsupportedFields.length > 0) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation accepts only name and definition.",
+        unsupported_fields: unsupportedFields,
+      });
+    }
+    const definition = workflow.definition;
+    if (validate_definition && definition !== undefined) {
+      const validation = await validateWorkflowDefinition(definition, {
+        modelResolver:
+          validation_mode === "live" ? getModelBySlug : undefined,
+        policyChecks: policy_checks,
+      });
+      if (!validation.valid) {
+        return errorText({ created: false, validation });
+      }
+    }
+    return text(
+      await eachRequest("/v1/workflows", {
         method: "POST",
         body: JSON.stringify(workflow),
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1560,15 +1729,54 @@ registerTool(
     workflow_id: z.string().min(1),
     version_id: z.string().min(1),
     body: jsonObjectSchema.describe("UpsertVersionRequest body."),
+    validate_definition: z.boolean().default(true),
+    validation_mode: z.enum(["structural", "live"]).default("live"),
+    policy_checks: z.boolean().default(false),
   },
-  async ({ workflow_id, version_id, body }) =>
-    text(
+  async ({
+    workflow_id,
+    version_id,
+    body,
+    validate_definition,
+    validation_mode,
+    policy_checks,
+  }) => {
+    if (
+      body.version_id !== undefined &&
+      String(body.version_id) !== version_id
+    ) {
+      return errorText({
+        updated: false,
+        error: "body.version_id must match the version_id path parameter.",
+        expected: version_id,
+        received: body.version_id,
+      });
+    }
+    if (!body.definition || typeof body.definition !== "object") {
+      return errorText({
+        updated: false,
+        error: "Current version upsert requires body.definition.",
+      });
+    }
+    if (validate_definition) {
+      const validation = await validateWorkflowDefinition(body.definition, {
+        expectedVersion: version_id,
+        modelResolver:
+          validation_mode === "live" ? getModelBySlug : undefined,
+        policyChecks: policy_checks,
+      });
+      if (!validation.valid) {
+        return errorText({ updated: false, validation });
+      }
+    }
+    return text(
       await eachRequest(`/workflows/${workflow_id}/versions/${version_id}`, {
         baseUrl: EACH_WORKFLOWS_BASE_URL,
         method: "PUT",
         body: JSON.stringify(body),
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1584,15 +1792,22 @@ registerTool(
     inputs: jsonObjectSchema.default({}),
     version_id: z.string().optional().describe("Defaults to the latest version."),
     webhook_url: z.string().url().optional(),
+    webhook_secret: z.string().min(1).optional(),
   },
-  async ({ workflow_id, inputs, version_id, webhook_url }) =>
-    text(
-      await eachRequest(`/${workflow_id}/trigger`, {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+  async ({ workflow_id, inputs, version_id, webhook_url, webhook_secret }, extra) => {
+    const resolvedVersion = await resolveWorkflowVersionId(
+      workflow_id,
+      version_id,
+      extra?.signal,
+    );
+    return text(
+      await eachRequest(workflowTriggerPath(workflow_id, resolvedVersion), {
         method: "POST",
-        body: JSON.stringify({ version_id, inputs, webhook_url }),
+        body: JSON.stringify({ inputs, webhook_url, webhook_secret }),
+        signal: extra?.signal,
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1611,15 +1826,22 @@ registerTool(
       .describe("One input object per execution; the API allows 1-10 items."),
     version_id: z.string().optional(),
     webhook_url: z.string().url().optional(),
+    webhook_secret: z.string().min(1).optional(),
   },
-  async ({ workflow_id, inputs, version_id, webhook_url }) =>
-    text(
-      await eachRequest(`/${workflow_id}/bulk-trigger`, {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+  async ({ workflow_id, inputs, version_id, webhook_url, webhook_secret }, extra) => {
+    const resolvedVersion = await resolveWorkflowVersionId(
+      workflow_id,
+      version_id,
+      extra?.signal,
+    );
+    return text(
+      await eachRequest(workflowTriggerPath(workflow_id, resolvedVersion, true), {
         method: "POST",
-        body: JSON.stringify({ version_id, inputs, webhook_url }),
+        body: JSON.stringify({ inputs, webhook_url, webhook_secret }),
+        signal: extra?.signal,
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1637,8 +1859,8 @@ registerTool(
   },
   async ({ workflow_id, limit, offset, bulk_id }) =>
     text(
-      await eachRequest(appendQuery(`/workflows/${workflow_id}/executions`, { limit, offset, bulk_id }), {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+      await eachRequest(appendQuery(`/v1/workflows/${workflow_id}/executions`, { limit, offset, bulk_id }), {
+        baseUrl: EACH_API_BASE_URL,
       }),
     ),
 );
@@ -1659,20 +1881,24 @@ registerTool(
   },
   async ({ execution_id, wait, timeout_seconds, poll_interval_seconds }, extra) => {
     const fetchExecution = () =>
-      eachRequest<Record<string, unknown>>(`/executions/${execution_id}`, {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+      eachRequest<Record<string, unknown>>(workflowExecutionPath(execution_id), {
+        signal: extra?.signal,
       });
 
     if (!wait) return text(await fetchExecution());
 
-    const { completed, last } = await pollUntilDone(
+    const { completed, cancelled, last } = await pollUntilDone(
       fetchExecution,
       WORKFLOW_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra,
     );
-    return text(completed ? last : { status: "timeout", execution_id, last });
+    return text(
+      completed
+        ? last
+        : { status: cancelled ? "cancelled_by_client" : "timeout", execution_id, last },
+    );
   },
 );
 
@@ -1709,14 +1935,17 @@ registerTool(
     slug: z.string().min(1),
     version_id: z.string().min(1),
     inputs: jsonObjectSchema.default({}),
-    webhook_url: z.string().url().optional(),
   },
-  async ({ nickname, slug, version_id, inputs, webhook_url }) =>
+  async ({ nickname, slug, version_id, inputs }) =>
     text(
       await eachRequest(`/public/@${nickname}/workflows/${slug}/versions/${version_id}/trigger`, {
         baseUrl: EACH_WORKFLOWS_BASE_URL,
         method: "POST",
-        body: JSON.stringify({ inputs, webhook_url }),
+        auth: false,
+        body: JSON.stringify({
+          api_key: requireApiKey(),
+          inputs,
+        }),
       }),
     ),
 );
@@ -1738,8 +1967,19 @@ registerTool(
       .boolean()
       .default(true)
       .describe(
-        "Use upstream streaming, aggregated server-side (recommended: progress notifications, no idle timeout). false requests a single buffered JSON response.",
+        "Use upstream streaming, aggregated server-side with progress notifications. false requests a single buffered JSON response.",
       ),
+    stream_timeout_seconds: z
+      .number()
+      .int()
+      .min(30)
+      .max(900)
+      .default(900)
+      .describe("Idle timeout for streaming responses. Each event resets the timer."),
+    include_raw_safe_events: z
+      .boolean()
+      .default(false)
+      .describe("Include bounded non-reasoning status/tool/progress events in raw_safe_events."),
     session_id: z.string().optional().describe("Continue an existing each::sense session."),
     mode: z.enum(["max", "eco"]).optional(),
     behavior: z.enum(["agent", "plan", "ask"]).optional(),
@@ -1751,6 +1991,10 @@ registerTool(
     tool_choice: z.unknown().optional(),
     temperature: z.number().min(0).max(2).optional(),
     max_tokens: z.number().int().min(1).optional(),
+    enable_safety_checker: z
+      .boolean()
+      .optional()
+      .describe("Top-level each::sense safety-checker control."),
     extra: jsonObjectSchema.default({}).describe("Additional provider-specific request fields."),
   },
   async (
@@ -1758,6 +2002,8 @@ registerTool(
       model,
       messages,
       stream,
+      stream_timeout_seconds,
+      include_raw_safe_events,
       session_id,
       mode,
       behavior,
@@ -1769,11 +2015,13 @@ registerTool(
       tool_choice,
       temperature,
       max_tokens,
+      enable_safety_checker,
       extra,
     },
     handlerExtra,
   ) => {
     const payload = {
+      ...extra,
       model,
       messages,
       session_id,
@@ -1787,14 +2035,19 @@ registerTool(
       tool_choice,
       temperature,
       max_tokens,
-      ...extra,
+      enable_safety_checker,
     };
 
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/chat/completions",
-          { baseUrl: EACH_SENSE_V1_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_V1_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events,
+          },
           handlerExtra,
         ),
       );
@@ -1838,15 +2091,33 @@ registerTool(
       .boolean()
       .default(false)
       .describe("Consume upstream streaming server-side for progress notifications; the final result is the same."),
+    stream_timeout_seconds: z.number().int().min(30).max(900).default(900),
+    include_raw_safe_events: z.boolean().default(false),
   },
-  async ({ message, workflow_id, version_id, session_id, stream }, handlerExtra) => {
+  async (
+    {
+      message,
+      workflow_id,
+      version_id,
+      session_id,
+      stream,
+      stream_timeout_seconds,
+      include_raw_safe_events,
+    },
+    handlerExtra,
+  ) => {
     const payload = { message, workflow_id, version_id, session_id };
 
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/workflow",
-          { baseUrl: EACH_SENSE_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events,
+          },
           handlerExtra,
         ),
       );
@@ -1957,7 +2228,6 @@ registerTool(
     text(
       await eachRequest("/v1/chat/completions", {
         method: "POST",
-        bearer: true,
         timeoutMs: 300_000,
         headers: webhook_url ? { "X-Eachlabs-Webhook-Url": webhook_url } : undefined,
         body: JSON.stringify({ model, messages, temperature, max_tokens, stream: false, ...extra }),
@@ -1982,9 +2252,23 @@ registerTool(
     query: jsonObjectSchema.default({}),
     body: z.unknown().optional(),
     auth: z.boolean().default(true),
-    bearer: z.boolean().default(false).describe("Use Authorization: Bearer instead of X-API-Key."),
+    auth_mode: z
+      .enum(["bearer", "x-api-key"])
+      .default("bearer")
+      .describe("Bearer is the current documented default; x-api-key is retained for legacy endpoints."),
+    bearer: z
+      .boolean()
+      .optional()
+      .describe("Deprecated compatibility switch. true maps to bearer; false maps to x-api-key."),
   },
-  async ({ target, method, path, query, body, auth, bearer }) => {
+  async ({ target, method, path, query, body, auth, auth_mode, bearer }) => {
+    const policyError = rawRequestPolicyError(method, auth);
+    if (policyError) {
+      return errorText({
+        blocked: true,
+        error: policyError,
+      });
+    }
     const baseUrl =
       target === "workflows"
         ? EACH_WORKFLOWS_BASE_URL
@@ -2000,7 +2284,12 @@ registerTool(
         baseUrl,
         method,
         auth,
-        bearer,
+        authMode:
+          bearer === undefined
+            ? auth_mode
+            : bearer
+              ? "bearer"
+              : "x-api-key",
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
     );
@@ -2016,24 +2305,47 @@ registerTool(
   },
   {},
   async () => {
-    const catalog = await eachRequest<unknown>(appendQuery("/v1/models", { limit: 1, offset: 0 }), {
-      auth: false,
-    });
+    const [catalogResult, updateResult] = await Promise.allSettled([
+      eachRequest<unknown>(appendQuery("/v1/models", { limit: 1, offset: 0 }), {
+        auth: false,
+        timeoutMs: 5000,
+        retries: 0,
+      }),
+      fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(5000) }),
+    ]);
+
+    const catalog =
+      catalogResult.status === "fulfilled"
+        ? Array.isArray(catalogResult.value)
+          ? { reachable: true, sample_size: catalogResult.value.length }
+          : { reachable: true, response: catalogResult.value }
+        : {
+            reachable: false,
+            error:
+              catalogResult.reason instanceof Error
+                ? catalogResult.reason.message
+                : String(catalogResult.reason),
+          };
 
     let update: Record<string, unknown> = { current_version: SERVER_VERSION };
     try {
-      const response = await fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(5000) });
+      if (updateResult.status === "rejected") throw updateResult.reason;
+      const response = updateResult.value;
       if (response.ok) {
         const remote = (await response.json()) as { version?: string };
         update = {
           current_version: SERVER_VERSION,
           latest_version: remote.version ?? "unknown",
           update_available: Boolean(remote.version && remote.version !== SERVER_VERSION),
-          how_to_update: "git pull && npm install && npm run build (or `npm run update`)",
+          how_to_update:
+            "Marketplace installs: update through the Codex/Claude plugin marketplace. Source checkouts: npm ci && npm run build.",
         };
+      } else {
+        update.update_check = `HTTP ${response.status}`;
       }
-    } catch {
-      update.update_check = "unreachable";
+    } catch (error) {
+      update.update_check =
+        error instanceof Error ? error.message : "unreachable";
     }
 
     return text({
@@ -2041,7 +2353,7 @@ registerTool(
       workflows_base_url: EACH_WORKFLOWS_BASE_URL,
       sense_base_url: EACH_SENSE_BASE_URL,
       api_key_configured: Boolean(EACH_API_KEY),
-      catalog_probe: Array.isArray(catalog) ? { reachable: true, sample_size: catalog.length } : catalog,
+      catalog_probe: catalog,
       update,
     });
   },
@@ -2101,6 +2413,105 @@ server.registerPrompt(
             "Prefer eachsense_build_workflow to draft it, then inspect the result with eachlabs_get_workflow,",
             "refine versions via eachlabs_upsert_workflow_version if needed, and finally test it with",
             "eachlabs_execute_workflow plus eachlabs_get_workflow_execution (wait=true).",
+          ].join("\n"),
+        },
+      },
+    ],
+  }),
+);
+
+server.registerPrompt(
+  "eachlabs-choose-model",
+  {
+    title: "Choose an each::labs model",
+    description:
+      "Find and compare suitable models without running predictions or spending credits.",
+    argsSchema: {
+      use_case: z
+        .string()
+        .describe(
+          "What the developer needs, e.g. 'image-to-video with a duration control'.",
+        ),
+      required_fields: z
+        .string()
+        .optional()
+        .describe("Optional comma-separated required input fields."),
+    },
+  },
+  ({ use_case, required_fields }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `Choose the best each::labs model for: ${use_case}`,
+            required_fields
+              ? `Required input fields: ${required_fields}.`
+              : "",
+            "Do not run a prediction. Search or recommend candidates, compare the strongest 2-5 with eachlabs_compare_models,",
+            "and explain the recommendation using provider, request fields, constraints, output type, and catalog p50 latency.",
+            "State clearly that p50 is not a price or quality guarantee.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+      },
+    ],
+  }),
+);
+
+server.registerPrompt(
+  "eachlabs-debug-run",
+  {
+    title: "Debug an each::labs run",
+    description:
+      "Diagnose a prediction or workflow execution without automatically retrying paid work.",
+    argsSchema: {
+      kind: z.enum(["prediction", "workflow"]),
+      run_id: z.string().describe("Prediction ID or workflow execution ID."),
+    },
+  },
+  ({ kind, run_id }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `Diagnose this each::labs ${kind} run: ${run_id}`,
+            "Use eachlabs_diagnose_run first. Explain the evidence, likely cause, and safest next action.",
+            "Do not create or retry a paid run automatically. Check execution history before recommending a retry when the write result may be ambiguous.",
+          ].join("\n"),
+        },
+      },
+    ],
+  }),
+);
+
+server.registerPrompt(
+  "eachlabs-developer-checkup",
+  {
+    title: "Audit an each::labs integration",
+    description:
+      "Review a model or workflow integration for schema drift, safe retries, observability, and production readiness without spending credits.",
+    argsSchema: {
+      target: z
+        .string()
+        .describe("Model slug, workflow definition, or integration description to review."),
+    },
+  },
+  ({ target }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `Audit this each::labs integration for developer readiness: ${target}`,
+            "Do not run paid predictions. Inspect the live model schema where applicable, compare it with any supplied baseline,",
+            "validate and diff workflow definitions, check async polling/webhook behavior, and generate a privacy-safe debug bundle for failed run IDs.",
+            "Call out breaking schema changes, ambiguous-write retry risks, secret handling, media URL safety, observability gaps, and the exact pre-production checks.",
           ].join("\n"),
         },
       },

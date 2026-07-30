@@ -6,7 +6,11 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __export = (target, all) => {
   for (var name in all)
@@ -3222,8 +3226,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path) {
-      let input = path;
+    function removeDotSegments(path2) {
+      let input = path2;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3422,8 +3426,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path && path !== "/" ? path : void 0;
+        const [path2, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3730,7 +3734,7 @@ var require_fast_uri = __commonJS({
         query: void 0,
         fragment: void 0
       };
-      let isIP = false;
+      let isIP2 = false;
       if (options.reference === "suffix") {
         if (options.scheme) {
           uri = options.scheme + ":" + uri;
@@ -3755,9 +3759,9 @@ var require_fast_uri = __commonJS({
           if (ipv4result === false) {
             const ipv6result = normalizeIPv6(parsed.host);
             parsed.host = ipv6result.host.toLowerCase();
-            isIP = ipv6result.isIPV6;
+            isIP2 = ipv6result.isIPV6;
           } else {
-            isIP = true;
+            isIP2 = true;
           }
         }
         if (parsed.scheme === void 0 && parsed.userinfo === void 0 && parsed.host === void 0 && parsed.port === void 0 && parsed.query === void 0 && !parsed.path) {
@@ -3774,7 +3778,7 @@ var require_fast_uri = __commonJS({
         }
         const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
         if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
-          if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+          if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP2 === false && nonSimpleDomain(parsed.host)) {
             try {
               parsed.host = URL.domainToASCII(parsed.host.toLowerCase());
             } catch (e) {
@@ -6748,9 +6752,9 @@ var require_limit = __commonJS({
       },
       dependencies: ["format"]
     };
-    var formatLimitPlugin = (ajv) => {
-      ajv.addKeyword(exports.formatLimitDefinition);
-      return ajv;
+    var formatLimitPlugin = (ajv2) => {
+      ajv2.addKeyword(exports.formatLimitDefinition);
+      return ajv2;
     };
     exports.default = formatLimitPlugin;
   }
@@ -6766,17 +6770,17 @@ var require_dist = __commonJS({
     var codegen_1 = require_codegen();
     var fullName = new codegen_1.Name("fullFormats");
     var fastName = new codegen_1.Name("fastFormats");
-    var formatsPlugin = (ajv, opts = { keywords: true }) => {
+    var formatsPlugin = (ajv2, opts = { keywords: true }) => {
       if (Array.isArray(opts)) {
-        addFormats(ajv, opts, formats_1.fullFormats, fullName);
-        return ajv;
+        addFormats(ajv2, opts, formats_1.fullFormats, fullName);
+        return ajv2;
       }
       const [formats, exportName] = opts.mode === "fast" ? [formats_1.fastFormats, fastName] : [formats_1.fullFormats, fullName];
       const list = opts.formats || formats_1.formatNames;
-      addFormats(ajv, list, formats, exportName);
+      addFormats(ajv2, list, formats, exportName);
       if (opts.keywords)
-        (0, limit_1.default)(ajv);
-      return ajv;
+        (0, limit_1.default)(ajv2);
+      return ajv2;
     };
     formatsPlugin.get = (name, mode = "full") => {
       const formats = mode === "fast" ? formats_1.fastFormats : formats_1.fullFormats;
@@ -6785,16 +6789,120 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs, exportName) {
+    function addFormats(ajv2, list, fs, exportName) {
       var _a;
       var _b;
-      (_a = (_b = ajv.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
+      (_a = (_b = ajv2.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs[f]);
+        ajv2.addFormat(f, fs[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = formatsPlugin;
+  }
+});
+
+// node_modules/content-type/index.js
+var require_content_type = __commonJS({
+  "node_modules/content-type/index.js"(exports) {
+    "use strict";
+    var PARAM_REGEXP = /; *([!#$%&'*+.^_`|~0-9A-Za-z-]+) *= *("(?:[\u000b\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\u000b\u0020-\u00ff])*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+) */g;
+    var TEXT_REGEXP = /^[\u000b\u0020-\u007e\u0080-\u00ff]+$/;
+    var TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+    var QESC_REGEXP = /\\([\u000b\u0020-\u00ff])/g;
+    var QUOTE_REGEXP = /([\\"])/g;
+    var TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+    exports.format = format;
+    exports.parse = parse3;
+    function format(obj) {
+      if (!obj || typeof obj !== "object") {
+        throw new TypeError("argument obj is required");
+      }
+      var parameters = obj.parameters;
+      var type = obj.type;
+      if (!type || !TYPE_REGEXP.test(type)) {
+        throw new TypeError("invalid type");
+      }
+      var string4 = type;
+      if (parameters && typeof parameters === "object") {
+        var param;
+        var params = Object.keys(parameters).sort();
+        for (var i = 0; i < params.length; i++) {
+          param = params[i];
+          if (!TOKEN_REGEXP.test(param)) {
+            throw new TypeError("invalid parameter name");
+          }
+          string4 += "; " + param + "=" + qstring(parameters[param]);
+        }
+      }
+      return string4;
+    }
+    function parse3(string4) {
+      if (!string4) {
+        throw new TypeError("argument string is required");
+      }
+      var header = typeof string4 === "object" ? getcontenttype(string4) : string4;
+      if (typeof header !== "string") {
+        throw new TypeError("argument string is required to be a string");
+      }
+      var index = header.indexOf(";");
+      var type = index !== -1 ? header.slice(0, index).trim() : header.trim();
+      if (!TYPE_REGEXP.test(type)) {
+        throw new TypeError("invalid media type");
+      }
+      var obj = new ContentType(type.toLowerCase());
+      if (index !== -1) {
+        var key;
+        var match;
+        var value;
+        PARAM_REGEXP.lastIndex = index;
+        while (match = PARAM_REGEXP.exec(header)) {
+          if (match.index !== index) {
+            throw new TypeError("invalid parameter format");
+          }
+          index += match[0].length;
+          key = match[1].toLowerCase();
+          value = match[2];
+          if (value.charCodeAt(0) === 34) {
+            value = value.slice(1, -1);
+            if (value.indexOf("\\") !== -1) {
+              value = value.replace(QESC_REGEXP, "$1");
+            }
+          }
+          obj.parameters[key] = value;
+        }
+        if (index !== header.length) {
+          throw new TypeError("invalid parameter format");
+        }
+      }
+      return obj;
+    }
+    function getcontenttype(obj) {
+      var header;
+      if (typeof obj.getHeader === "function") {
+        header = obj.getHeader("content-type");
+      } else if (typeof obj.headers === "object") {
+        header = obj.headers && obj.headers["content-type"];
+      }
+      if (typeof header !== "string") {
+        throw new TypeError("content-type header is missing from object");
+      }
+      return header;
+    }
+    function qstring(val) {
+      var str = String(val);
+      if (TOKEN_REGEXP.test(str)) {
+        return str;
+      }
+      if (str.length > 0 && !TEXT_REGEXP.test(str)) {
+        throw new TypeError("invalid parameter value");
+      }
+      return '"' + str.replace(QUOTE_REGEXP, "\\$1") + '"';
+    }
+    function ContentType(type) {
+      this.parameters = /* @__PURE__ */ Object.create(null);
+      this.type = type;
+    }
   }
 });
 
@@ -7064,8 +7172,8 @@ var ZodIssueCode = util.arrayToEnum([
   "not_finite"
 ]);
 var quotelessJson = (obj) => {
-  const json = JSON.stringify(obj, null, 2);
-  return json.replace(/"([^"]+)":/g, "$1:");
+  const json2 = JSON.stringify(obj, null, 2);
+  return json2.replace(/"([^"]+)":/g, "$1:");
 };
 var ZodError = class _ZodError extends Error {
   get errors() {
@@ -7276,8 +7384,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path, errorMaps, issueData } = params;
-  const fullPath = [...path, ...issueData.path || []];
+  const { data, path: path2, errorMaps, issueData } = params;
+  const fullPath = [...path2, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7393,11 +7501,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path, key) {
+  constructor(parent, value, path2, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path;
+    this._path = path2;
     this._key = key;
   }
   get path() {
@@ -11034,10 +11142,10 @@ function assignProp(target, prop, value) {
     configurable: true
   });
 }
-function getElementAtPath(obj, path) {
-  if (!path)
+function getElementAtPath(obj, path2) {
+  if (!path2)
     return obj;
-  return path.reduce((acc, key) => acc?.[key], obj);
+  return path2.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11357,11 +11465,11 @@ function aborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path, issues) {
+function prefixIssues(path2, issues) {
   return issues.map((iss) => {
     var _a;
     (_a = iss).path ?? (_a.path = []);
-    iss.path.unshift(path);
+    iss.path.unshift(path2);
     return iss;
   });
 }
@@ -14017,24 +14125,24 @@ var JSONSchemaGenerator = class {
         const _json = result.schema;
         switch (def.type) {
           case "string": {
-            const json = _json;
-            json.type = "string";
+            const json2 = _json;
+            json2.type = "string";
             const { minimum, maximum, format, patterns, contentEncoding } = schema._zod.bag;
             if (typeof minimum === "number")
-              json.minLength = minimum;
+              json2.minLength = minimum;
             if (typeof maximum === "number")
-              json.maxLength = maximum;
+              json2.maxLength = maximum;
             if (format) {
-              json.format = formatMap[format] ?? format;
-              if (json.format === "")
-                delete json.format;
+              json2.format = formatMap[format] ?? format;
+              if (json2.format === "")
+                delete json2.format;
             }
             if (contentEncoding)
-              json.contentEncoding = contentEncoding;
+              json2.contentEncoding = contentEncoding;
             if (patterns && patterns.size > 0) {
               const regexes = [...patterns];
               if (regexes.length === 1)
-                json.pattern = regexes[0].source;
+                json2.pattern = regexes[0].source;
               else if (regexes.length > 1) {
                 result.schema.allOf = [
                   ...regexes.map((regex) => ({
@@ -14047,41 +14155,41 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "number": {
-            const json = _json;
+            const json2 = _json;
             const { minimum, maximum, format, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
             if (typeof format === "string" && format.includes("int"))
-              json.type = "integer";
+              json2.type = "integer";
             else
-              json.type = "number";
+              json2.type = "number";
             if (typeof exclusiveMinimum === "number")
-              json.exclusiveMinimum = exclusiveMinimum;
+              json2.exclusiveMinimum = exclusiveMinimum;
             if (typeof minimum === "number") {
-              json.minimum = minimum;
+              json2.minimum = minimum;
               if (typeof exclusiveMinimum === "number") {
                 if (exclusiveMinimum >= minimum)
-                  delete json.minimum;
+                  delete json2.minimum;
                 else
-                  delete json.exclusiveMinimum;
+                  delete json2.exclusiveMinimum;
               }
             }
             if (typeof exclusiveMaximum === "number")
-              json.exclusiveMaximum = exclusiveMaximum;
+              json2.exclusiveMaximum = exclusiveMaximum;
             if (typeof maximum === "number") {
-              json.maximum = maximum;
+              json2.maximum = maximum;
               if (typeof exclusiveMaximum === "number") {
                 if (exclusiveMaximum <= maximum)
-                  delete json.maximum;
+                  delete json2.maximum;
                 else
-                  delete json.exclusiveMaximum;
+                  delete json2.exclusiveMaximum;
               }
             }
             if (typeof multipleOf === "number")
-              json.multipleOf = multipleOf;
+              json2.multipleOf = multipleOf;
             break;
           }
           case "boolean": {
-            const json = _json;
-            json.type = "boolean";
+            const json2 = _json;
+            json2.type = "boolean";
             break;
           }
           case "bigint": {
@@ -14129,23 +14237,23 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "array": {
-            const json = _json;
+            const json2 = _json;
             const { minimum, maximum } = schema._zod.bag;
             if (typeof minimum === "number")
-              json.minItems = minimum;
+              json2.minItems = minimum;
             if (typeof maximum === "number")
-              json.maxItems = maximum;
-            json.type = "array";
-            json.items = this.process(def.element, { ...params, path: [...params.path, "items"] });
+              json2.maxItems = maximum;
+            json2.type = "array";
+            json2.items = this.process(def.element, { ...params, path: [...params.path, "items"] });
             break;
           }
           case "object": {
-            const json = _json;
-            json.type = "object";
-            json.properties = {};
+            const json2 = _json;
+            json2.type = "object";
+            json2.properties = {};
             const shape = def.shape;
             for (const key in shape) {
-              json.properties[key] = this.process(shape[key], {
+              json2.properties[key] = this.process(shape[key], {
                 ...params,
                 path: [...params.path, "properties", key]
               });
@@ -14160,15 +14268,15 @@ var JSONSchemaGenerator = class {
               }
             }));
             if (requiredKeys.size > 0) {
-              json.required = Array.from(requiredKeys);
+              json2.required = Array.from(requiredKeys);
             }
             if (def.catchall?._zod.def.type === "never") {
-              json.additionalProperties = false;
+              json2.additionalProperties = false;
             } else if (!def.catchall) {
               if (this.io === "output")
-                json.additionalProperties = false;
+                json2.additionalProperties = false;
             } else if (def.catchall) {
-              json.additionalProperties = this.process(def.catchall, {
+              json2.additionalProperties = this.process(def.catchall, {
                 ...params,
                 path: [...params.path, "additionalProperties"]
               });
@@ -14176,15 +14284,15 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "union": {
-            const json = _json;
-            json.anyOf = def.options.map((x, i) => this.process(x, {
+            const json2 = _json;
+            json2.anyOf = def.options.map((x, i) => this.process(x, {
               ...params,
               path: [...params.path, "anyOf", i]
             }));
             break;
           }
           case "intersection": {
-            const json = _json;
+            const json2 = _json;
             const a = this.process(def.left, {
               ...params,
               path: [...params.path, "allOf", 0]
@@ -14198,17 +14306,17 @@ var JSONSchemaGenerator = class {
               ...isSimpleIntersection(a) ? a.allOf : [a],
               ...isSimpleIntersection(b) ? b.allOf : [b]
             ];
-            json.allOf = allOf;
+            json2.allOf = allOf;
             break;
           }
           case "tuple": {
-            const json = _json;
-            json.type = "array";
+            const json2 = _json;
+            json2.type = "array";
             const prefixItems = def.items.map((x, i) => this.process(x, { ...params, path: [...params.path, "prefixItems", i] }));
             if (this.target === "draft-2020-12") {
-              json.prefixItems = prefixItems;
+              json2.prefixItems = prefixItems;
             } else {
-              json.items = prefixItems;
+              json2.items = prefixItems;
             }
             if (def.rest) {
               const rest = this.process(def.rest, {
@@ -14216,29 +14324,29 @@ var JSONSchemaGenerator = class {
                 path: [...params.path, "items"]
               });
               if (this.target === "draft-2020-12") {
-                json.items = rest;
+                json2.items = rest;
               } else {
-                json.additionalItems = rest;
+                json2.additionalItems = rest;
               }
             }
             if (def.rest) {
-              json.items = this.process(def.rest, {
+              json2.items = this.process(def.rest, {
                 ...params,
                 path: [...params.path, "items"]
               });
             }
             const { minimum, maximum } = schema._zod.bag;
             if (typeof minimum === "number")
-              json.minItems = minimum;
+              json2.minItems = minimum;
             if (typeof maximum === "number")
-              json.maxItems = maximum;
+              json2.maxItems = maximum;
             break;
           }
           case "record": {
-            const json = _json;
-            json.type = "object";
-            json.propertyNames = this.process(def.keyType, { ...params, path: [...params.path, "propertyNames"] });
-            json.additionalProperties = this.process(def.valueType, {
+            const json2 = _json;
+            json2.type = "object";
+            json2.propertyNames = this.process(def.keyType, { ...params, path: [...params.path, "propertyNames"] });
+            json2.additionalProperties = this.process(def.valueType, {
               ...params,
               path: [...params.path, "additionalProperties"]
             });
@@ -14257,17 +14365,17 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "enum": {
-            const json = _json;
+            const json2 = _json;
             const values = getEnumValues(def.entries);
             if (values.every((v) => typeof v === "number"))
-              json.type = "number";
+              json2.type = "number";
             if (values.every((v) => typeof v === "string"))
-              json.type = "string";
-            json.enum = values;
+              json2.type = "string";
+            json2.enum = values;
             break;
           }
           case "literal": {
-            const json = _json;
+            const json2 = _json;
             const vals = [];
             for (const val of def.values) {
               if (val === void 0) {
@@ -14288,23 +14396,23 @@ var JSONSchemaGenerator = class {
             if (vals.length === 0) {
             } else if (vals.length === 1) {
               const val = vals[0];
-              json.type = val === null ? "null" : typeof val;
-              json.const = val;
+              json2.type = val === null ? "null" : typeof val;
+              json2.const = val;
             } else {
               if (vals.every((v) => typeof v === "number"))
-                json.type = "number";
+                json2.type = "number";
               if (vals.every((v) => typeof v === "string"))
-                json.type = "string";
+                json2.type = "string";
               if (vals.every((v) => typeof v === "boolean"))
-                json.type = "string";
+                json2.type = "string";
               if (vals.every((v) => v === null))
-                json.type = "null";
-              json.enum = vals;
+                json2.type = "null";
+              json2.enum = vals;
             }
             break;
           }
           case "file": {
-            const json = _json;
+            const json2 = _json;
             const file = {
               type: "string",
               format: "binary",
@@ -14318,15 +14426,15 @@ var JSONSchemaGenerator = class {
             if (mime) {
               if (mime.length === 1) {
                 file.contentMediaType = mime[0];
-                Object.assign(json, file);
+                Object.assign(json2, file);
               } else {
-                json.anyOf = mime.map((m) => {
+                json2.anyOf = mime.map((m) => {
                   const mFile = { ...file, contentMediaType: m };
                   return mFile;
                 });
               }
             } else {
-              Object.assign(json, file);
+              Object.assign(json2, file);
             }
             break;
           }
@@ -14347,8 +14455,8 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "success": {
-            const json = _json;
-            json.type = "boolean";
+            const json2 = _json;
+            json2.type = "boolean";
             break;
           }
           case "default": {
@@ -14383,12 +14491,12 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "template_literal": {
-            const json = _json;
+            const json2 = _json;
             const pattern = schema._zod.pattern;
             if (!pattern)
               throw new Error("Pattern not found in template literal");
-            json.type = "string";
-            json.pattern = pattern.source;
+            json2.type = "string";
+            json2.pattern = pattern.source;
             break;
           }
           case "pipe": {
@@ -14862,16 +14970,32 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
+function getDotPath(path2) {
+  if (path2.length === 0) {
+    return "object root";
+  }
+  return path2.reduce((acc, seg, index) => {
+    if (index === 0) {
+      return String(seg);
+    }
+    if (typeof seg === "number") {
+      return `${acc}[${seg}]`;
+    }
+    return `${acc}.${seg}`;
+  }, "");
+}
 function getParseErrorMessage(error2) {
   if (error2 && typeof error2 === "object") {
+    if ("issues" in error2 && Array.isArray(error2.issues) && error2.issues.length > 0) {
+      return error2.issues.map((i) => {
+        if (!i.path?.length) {
+          return i.message;
+        }
+        return `${i.message} at ${getDotPath(i.path)}`;
+      }).join("\n");
+    }
     if ("message" in error2 && typeof error2.message === "string") {
       return error2.message;
-    }
-    if ("issues" in error2 && Array.isArray(error2.issues) && error2.issues.length > 0) {
-      const firstIssue = error2.issues[0];
-      if (firstIssue && typeof firstIssue === "object" && "message" in firstIssue) {
-        return String(firstIssue.message);
-      }
     }
     try {
       return JSON.stringify(error2);
@@ -19518,15 +19642,15 @@ function mergeCapabilities(base, additional) {
 var import_ajv = __toESM(require_ajv(), 1);
 var import_ajv_formats = __toESM(require_dist(), 1);
 function createDefaultAjvInstance() {
-  const ajv = new import_ajv.default({
+  const ajv2 = new import_ajv.default({
     strict: false,
     validateFormats: true,
     validateSchema: false,
     allErrors: true
   });
   const addFormats = import_ajv_formats.default;
-  addFormats(ajv);
-  return ajv;
+  addFormats(ajv2);
+  return ajv2;
 }
 var AjvJsonSchemaValidator = class {
   /**
@@ -19549,8 +19673,8 @@ var AjvJsonSchemaValidator = class {
    * const validator = new AjvJsonSchemaValidator(ajv);
    * ```
    */
-  constructor(ajv) {
-    this._ajv = ajv ?? createDefaultAjvInstance();
+  constructor(ajv2) {
+    this._ajv = ajv2 ?? createDefaultAjvInstance();
   }
   /**
    * Create a validator for the given JSON Schema
@@ -19896,16 +20020,7 @@ var Server = class extends Protocol {
     if (!methodSchema) {
       throw new Error("Schema is missing a method literal");
     }
-    let methodValue;
-    if (isZ4Schema(methodSchema)) {
-      const v4Schema = methodSchema;
-      const v4Def = v4Schema._zod?.def;
-      methodValue = v4Def?.value ?? v4Schema.value;
-    } else {
-      const v3Schema = methodSchema;
-      const legacyDef = v3Schema._def;
-      methodValue = legacyDef?.value ?? v3Schema.value;
-    }
+    const methodValue = getLiteralValue(methodSchema);
     if (typeof methodValue !== "string") {
       throw new Error("Schema method literal must be a string");
     }
@@ -21093,8 +21208,17 @@ var EMPTY_COMPLETION_RESULT = {
 import process2 from "node:process";
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/shared/stdio.js
+var STDIO_DEFAULT_MAX_BUFFER_SIZE = 10 * 1024 * 1024;
 var ReadBuffer = class {
+  constructor(options) {
+    this._maxBufferSize = options?.maxBufferSize ?? STDIO_DEFAULT_MAX_BUFFER_SIZE;
+  }
   append(chunk) {
+    const newSize = (this._buffer?.length ?? 0) + chunk.length;
+    if (newSize > this._maxBufferSize) {
+      this.clear();
+      throw new Error(`ReadBuffer exceeded maximum size of ${this._maxBufferSize} bytes`);
+    }
     this._buffer = this._buffer ? Buffer.concat([this._buffer, chunk]) : chunk;
   }
   readMessage() {
@@ -21122,18 +21246,24 @@ function serializeMessage(message) {
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js
 var StdioServerTransport = class {
-  constructor(_stdin = process2.stdin, _stdout = process2.stdout) {
+  constructor(_stdin = process2.stdin, _stdout = process2.stdout, options) {
     this._stdin = _stdin;
     this._stdout = _stdout;
-    this._readBuffer = new ReadBuffer();
     this._started = false;
     this._ondata = (chunk) => {
-      this._readBuffer.append(chunk);
-      this.processReadBuffer();
+      try {
+        this._readBuffer.append(chunk);
+        this.processReadBuffer();
+      } catch (error2) {
+        this.onerror?.(error2);
+        this.close().catch(() => {
+        });
+      }
     };
     this._onerror = (error2) => {
       this.onerror?.(error2);
     };
+    this._readBuffer = new ReadBuffer({ maxBufferSize: options?.maxBufferSize });
   }
   /**
    * Starts listening for messages on stdin.
@@ -21171,8 +21301,8 @@ var StdioServerTransport = class {
   }
   send(message) {
     return new Promise((resolve) => {
-      const json = serializeMessage(message);
-      if (this._stdout.write(json)) {
+      const json2 = serializeMessage(message);
+      if (this._stdout.write(json2)) {
         resolve();
       } else {
         this._stdout.once("drain", resolve);
@@ -21180,6 +21310,208 @@ var StdioServerTransport = class {
     });
   }
 };
+
+// src/index.ts
+import { stat as stat2 } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+// src/config.ts
+var EACH_API_BASE_URL = process.env.EACH_API_BASE_URL ?? process.env.EACHLABS_API_BASE_URL ?? "https://api.eachlabs.ai";
+var EACH_WORKFLOWS_BASE_URL = process.env.EACH_WORKFLOWS_BASE_URL ?? process.env.EACHLABS_WORKFLOWS_BASE_URL ?? "https://workflows.eachlabs.run/api/v1";
+var EACH_SENSE_BASE_URL = process.env.EACH_SENSE_BASE_URL ?? process.env.EACHSENSE_BASE_URL ?? "https://eachsense-agent.core.eachlabs.run";
+var EACH_SENSE_V1_BASE_URL = process.env.EACH_SENSE_V1_BASE_URL ?? `${EACH_SENSE_BASE_URL}/v1`;
+var EACH_DOCS_MCP_URL = process.env.EACH_DOCS_MCP_URL ?? "https://docs.eachlabs.ai/mcp";
+var EACH_API_KEY = process.env.EACH_API_KEY ?? process.env.EACHLABS_API_KEY;
+var DEFAULT_TIMEOUT_MS = 6e4;
+var MODEL_CACHE_TTL_MS = 5 * 60 * 1e3;
+var MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+var MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024;
+var MAX_EMBED_IMAGE_BYTES = 3 * 1024 * 1024;
+var MAX_EMBED_TOTAL_BYTES = 12 * 1024 * 1024;
+var MAX_MEDIA_BLOCKS = 8;
+var MEDIA_DOWNLOAD_CONCURRENCY = 3;
+var MAX_AUDIO_RESPONSE_BYTES = 12 * 1024 * 1024;
+var ENABLE_EXPERIMENTAL_FLAGS = process.env.EACHLABS_ENABLE_EXPERIMENTAL_FLAGS === "1";
+var UPDATE_CHECK_URL = "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
+var SERVER_VERSION = "0.5.0";
+var PREDICTION_TERMINAL_STATUSES = [
+  "success",
+  "failed",
+  "error",
+  "cancelled"
+];
+var WORKFLOW_TERMINAL_STATUSES = [
+  "completed",
+  "failed",
+  "error",
+  "cancelled"
+];
+
+// src/core/http.ts
+var EachlabsError = class extends Error {
+  constructor(message, status, payload, ambiguousWrite = false, requestMetadata) {
+    super(message);
+    this.status = status;
+    this.payload = payload;
+    this.ambiguousWrite = ambiguousWrite;
+    this.requestMetadata = requestMetadata;
+  }
+  status;
+  payload;
+  ambiguousWrite;
+  requestMetadata;
+};
+function requireApiKey() {
+  if (!EACH_API_KEY) {
+    throw new EachlabsError(
+      "Missing API key. Set EACH_API_KEY or EACHLABS_API_KEY before starting the MCP server."
+    );
+  }
+  return EACH_API_KEY;
+}
+function joinUrl(baseUrl, path2) {
+  const base = baseUrl.replace(/\/+$/, "");
+  return `${base}${path2.startsWith("/") ? "" : "/"}${path2}`;
+}
+function appendQuery(path2, params) {
+  const url2 = new URL(path2, "https://placeholder.local");
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== void 0 && value !== null && value !== "") {
+      url2.searchParams.set(key, String(value));
+    }
+  }
+  return `${url2.pathname}${url2.search}`;
+}
+function retryDelayMs(attempt, retryAfter, random2 = Math.random) {
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.min(seconds * 1e3, 6e4);
+    }
+    const dateMs = Date.parse(retryAfter);
+    if (Number.isFinite(dateMs)) {
+      return Math.max(0, Math.min(dateMs - Date.now(), 6e4));
+    }
+  }
+  const base = Math.min(2 ** attempt * 1e3, 1e4);
+  return Math.min(Math.round(base * (0.75 + random2() * 0.5)), 1e4);
+}
+function responseMetadata(response, attempts, retryable) {
+  const retryAfter = response.headers.get("retry-after");
+  const retryAfterMs = retryAfter ? retryDelayMs(1, retryAfter, () => 0) : void 0;
+  const limit = response.headers.get("x-ratelimit-limit") ?? void 0;
+  const remaining = response.headers.get("x-ratelimit-remaining") ?? void 0;
+  const reset = response.headers.get("x-ratelimit-reset") ?? void 0;
+  return {
+    attempts,
+    retryable,
+    retryAfterSeconds: retryAfterMs === void 0 ? void 0 : retryAfterMs / 1e3,
+    requestId: response.headers.get("x-request-id") ?? response.headers.get("x-eachlabs-request-id") ?? void 0,
+    rateLimit: limit || remaining || reset ? { limit, remaining, reset } : void 0
+  };
+}
+function isRetrySafeMethod(method) {
+  return ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
+}
+function applyAuthHeaders(headers, apiKey, authMode) {
+  if (authMode === "x-api-key") {
+    headers.set("X-API-Key", apiKey);
+  } else {
+    headers.set("Authorization", `Bearer ${apiKey}`);
+  }
+  return headers;
+}
+function abortableSleep(ms, signal) {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason ?? new Error("Operation aborted."));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    if (!signal) return;
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new Error("Operation aborted."));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+function requestSignal(timeoutMs, signal) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+}
+async function readPayload(response) {
+  if (response.status === 204) return "";
+  const contentType2 = response.headers.get("content-type") ?? "";
+  return contentType2.includes("application/json") ? response.json() : response.text();
+}
+async function eachRequest(path2, options = {}) {
+  const {
+    baseUrl = EACH_API_BASE_URL,
+    auth: auth2 = true,
+    authMode = "bearer",
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    retries = 2,
+    signal,
+    ...requestInit
+  } = options;
+  const url2 = new URL(joinUrl(baseUrl, path2));
+  const headers = new Headers(requestInit.headers);
+  if (auth2) {
+    applyAuthHeaders(headers, requireApiKey(), authMode);
+  }
+  if (requestInit.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const method = (requestInit.method ?? "GET").toUpperCase();
+  const retrySafe = isRetrySafeMethod(method);
+  const maxAttempts = retries + 1;
+  for (let attempt = 1; ; attempt++) {
+    let response;
+    try {
+      response = await fetch(url2, {
+        ...requestInit,
+        headers,
+        signal: requestSignal(timeoutMs, signal)
+      });
+    } catch (error2) {
+      if (!retrySafe || attempt >= maxAttempts || signal?.aborted) {
+        const ambiguousWrite = !retrySafe;
+        throw new EachlabsError(
+          ambiguousWrite ? `Request to ${url2.pathname} failed after dispatch. The write result is unknown; it was not retried automatically. Check execution history before retrying manually.` : `Request to ${url2.pathname} failed: ${error2 instanceof Error ? error2.message : String(error2)}`,
+          void 0,
+          void 0,
+          ambiguousWrite,
+          {
+            attempts: attempt,
+            retryable: retrySafe
+          }
+        );
+      }
+      await abortableSleep(retryDelayMs(attempt, null), signal);
+      continue;
+    }
+    const payload = await readPayload(response);
+    if (!response.ok) {
+      const retryable = response.status === 429 || response.status >= 500 && retrySafe;
+      if (retryable && attempt < maxAttempts) {
+        await abortableSleep(
+          retryDelayMs(attempt, response.headers.get("retry-after")),
+          signal
+        );
+        continue;
+      }
+      throw new EachlabsError(
+        `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
+        response.status,
+        payload,
+        false,
+        responseMetadata(response, attempt, retryable)
+      );
+    }
+    return payload;
+  }
+}
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/client.js
 var ExperimentalClientTasks = class {
@@ -21455,16 +21787,7 @@ var Client = class extends Protocol {
     if (!methodSchema) {
       throw new Error("Schema is missing a method literal");
     }
-    let methodValue;
-    if (isZ4Schema(methodSchema)) {
-      const v4Schema = methodSchema;
-      const v4Def = v4Schema._zod?.def;
-      methodValue = v4Def?.value ?? v4Schema.value;
-    } else {
-      const v3Schema = methodSchema;
-      const legacyDef = v3Schema._def;
-      methodValue = legacyDef?.value ?? v3Schema.value;
-    }
+    const methodValue = getLiteralValue(methodSchema);
     if (typeof methodValue !== "string") {
       throw new Error("Schema method literal must be a string");
     }
@@ -21854,6 +22177,23 @@ var Client = class extends Protocol {
     return this.notification({ method: "notifications/roots/list_changed" });
   }
 };
+
+// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/mediaType.js
+var import_content_type = __toESM(require_content_type(), 1);
+function mediaTypeEssence(header) {
+  if (!header) {
+    return void 0;
+  }
+  try {
+    return import_content_type.default.parse(header).type;
+  } catch {
+    const essence = (header.split(";", 1)[0] ?? "").trim().toLowerCase();
+    if (essence === "" || header.slice(essence.length).includes(",")) {
+      return void 0;
+    }
+    return essence;
+  }
+}
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/shared/transport.js
 function normalizeHeaders(headers) {
@@ -23230,11 +23570,12 @@ var StreamableHTTPClientTransport = class {
       }
       const messages = Array.isArray(message) ? message : [message];
       const hasRequests = messages.filter((msg) => "method" in msg && "id" in msg && msg.id !== void 0).length > 0;
-      const contentType = response.headers.get("content-type");
+      const contentType2 = response.headers.get("content-type");
+      const responseMediaType = mediaTypeEssence(contentType2);
       if (hasRequests) {
-        if (contentType?.includes("text/event-stream")) {
+        if (responseMediaType === "text/event-stream") {
           this._handleSseStream(response.body, { onresumptiontoken }, false);
-        } else if (contentType?.includes("application/json")) {
+        } else if (responseMediaType === "application/json") {
           const data = await response.json();
           const responseMessages = Array.isArray(data) ? data.map((msg) => JSONRPCMessageSchema.parse(msg)) : [JSONRPCMessageSchema.parse(data)];
           for (const msg of responseMessages) {
@@ -23242,7 +23583,7 @@ var StreamableHTTPClientTransport = class {
           }
         } else {
           await response.body?.cancel();
-          throw new StreamableHTTPError(-1, `Unexpected content type: ${contentType}`);
+          throw new StreamableHTTPError(-1, `Unexpected content type: ${contentType2}`);
         }
       } else {
         await response.body?.cancel();
@@ -23310,238 +23651,347 @@ var StreamableHTTPClientTransport = class {
   }
 };
 
-// src/index.ts
-import { readFile, stat } from "node:fs/promises";
-import { realpathSync } from "node:fs";
-import { pathToFileURL } from "node:url";
-var EACH_API_BASE_URL = process.env.EACH_API_BASE_URL ?? "https://api.eachlabs.ai";
-var EACH_WORKFLOWS_BASE_URL = process.env.EACH_WORKFLOWS_BASE_URL ?? "https://workflows.eachlabs.run/api/v1";
-var EACH_SENSE_BASE_URL = process.env.EACH_SENSE_BASE_URL ?? "https://eachsense-agent.core.eachlabs.run";
-var EACH_SENSE_V1_BASE_URL = process.env.EACH_SENSE_V1_BASE_URL ?? `${EACH_SENSE_BASE_URL}/v1`;
-var EACH_DOCS_MCP_URL = process.env.EACH_DOCS_MCP_URL ?? "https://docs.eachlabs.ai/mcp";
-var EACH_API_KEY = process.env.EACH_API_KEY ?? process.env.EACHLABS_API_KEY;
-var DEFAULT_TIMEOUT_MS = 6e4;
-var MODEL_CACHE_TTL_MS = 5 * 60 * 1e3;
-var MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
-var MAX_EMBED_IMAGE_BYTES = 3 * 1024 * 1024;
-var MAX_MEDIA_BLOCKS = 8;
-var UPDATE_CHECK_URL = "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
-var SERVER_VERSION = "0.3.1";
-var PREDICTION_TERMINAL_STATUSES = ["success", "failed", "cancelled"];
-var WORKFLOW_TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
-var EachlabsError = class extends Error {
-  constructor(message, status, payload) {
-    super(message);
-    this.status = status;
-    this.payload = payload;
+// src/core/docs-client.ts
+var connectionPromise;
+async function createConnection() {
+  const client = new Client({
+    name: "eachlabs-docs-proxy",
+    version: "0.5.0"
+  });
+  const transport = new StreamableHTTPClientTransport(
+    new URL(EACH_DOCS_MCP_URL)
+  );
+  await client.connect(transport);
+  return { client, transport };
+}
+async function connection() {
+  connectionPromise ??= createConnection().catch((error2) => {
+    connectionPromise = void 0;
+    throw error2;
+  });
+  return connectionPromise;
+}
+async function resetConnection() {
+  const current = connectionPromise;
+  connectionPromise = void 0;
+  if (!current) return;
+  const resolved = await current.catch(() => void 0);
+  await resolved?.client.close().catch(() => void 0);
+}
+async function callOfficialDocsTool(name, args) {
+  try {
+    return await (await connection()).client.callTool({
+      name,
+      arguments: args
+    });
+  } catch {
+    await resetConnection();
+    return (await connection()).client.callTool({ name, arguments: args });
   }
-  status;
-  payload;
+}
+
+// src/core/audio.ts
+import { openAsBlob } from "node:fs";
+import { stat } from "node:fs/promises";
+
+// src/core/upload.ts
+import { createReadStream } from "node:fs";
+import { open } from "node:fs/promises";
+import path from "node:path";
+import { Readable, Transform } from "node:stream";
+var MIME_BY_EXTENSION = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".m4a": "audio/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".flac": "audio/flac"
 };
-var jsonObjectSchema = external_exports.record(external_exports.unknown());
-var chatMessageSchema = external_exports.object({
-  role: external_exports.string().describe("Message role, usually system, user, assistant, or tool."),
-  content: external_exports.unknown().describe("Message content. Strings and structured multimodal content are supported.")
-});
-function requireApiKey() {
-  if (!EACH_API_KEY) {
-    throw new EachlabsError(
-      "Missing API key. Set EACH_API_KEY or EACHLABS_API_KEY before starting the MCP server."
-    );
+function sniffImageMime(bytes) {
+  if (bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return "image/png";
   }
-  return EACH_API_KEY;
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) {
+    return "image/jpeg";
+  }
+  if (bytes.subarray(0, 6).toString("ascii").match(/^GIF8[79]a$/)) {
+    return "image/gif";
+  }
+  if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") {
+    return "image/webp";
+  }
+  return void 0;
 }
-function compact(value) {
-  return JSON.stringify(value, null, 2);
+async function inferContentType(filePath, requested) {
+  if (requested && requested !== "application/octet-stream") return requested;
+  const file = await open(filePath, "r");
+  try {
+    const bytes = Buffer.alloc(16);
+    const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+    const sniffed = sniffImageMime(bytes.subarray(0, bytesRead));
+    if (sniffed) return sniffed;
+  } finally {
+    await file.close();
+  }
+  return MIME_BY_EXTENSION[path.extname(filePath).toLowerCase()] ?? requested ?? "application/octet-stream";
 }
-function text(value) {
-  return {
-    content: [
-      {
-        type: "text",
-        text: typeof value === "string" ? value : compact(value)
+async function uploadFileStream({
+  url: url2,
+  filePath,
+  contentType: contentType2,
+  requiredHeaders,
+  size,
+  timeoutMs = 12e4,
+  extra
+}) {
+  let uploaded = 0;
+  let lastReported = 0;
+  const progressToken = extra?._meta?.progressToken;
+  const counter = new Transform({
+    transform(chunk, _encoding, callback) {
+      uploaded += chunk.length;
+      if (progressToken !== void 0 && extra?.sendNotification && (uploaded - lastReported >= 1024 * 1024 || uploaded === size)) {
+        lastReported = uploaded;
+        void extra.sendNotification({
+          method: "notifications/progress",
+          params: {
+            progressToken,
+            progress: uploaded,
+            total: size,
+            message: "uploading"
+          }
+        }).catch(() => void 0);
       }
-    ]
-  };
-}
-function errorText(value) {
-  return { ...text(value), isError: true };
-}
-function passthroughMcpResult(value) {
-  if (value && typeof value === "object" && "content" in value && Array.isArray(value.content)) {
-    return value;
-  }
-  return text(value);
-}
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-function joinUrl(baseUrl, path) {
-  const base = baseUrl.replace(/\/+$/, "");
-  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
-}
-async function eachRequest(path, options = {}) {
-  const url2 = new URL(joinUrl(options.baseUrl ?? EACH_API_BASE_URL, path));
-  const headers = new Headers(options.headers);
-  if (options.auth !== false) {
-    if (options.bearer) {
-      headers.set("Authorization", `Bearer ${requireApiKey()}`);
-    } else {
-      headers.set("X-API-Key", requireApiKey());
+      callback(null, chunk);
     }
-  }
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const method = (options.method ?? "GET").toUpperCase();
-  const maxAttempts = (options.retries ?? 2) + 1;
-  for (let attempt = 1; ; attempt++) {
-    let response;
-    try {
-      response = await fetch(url2, {
-        ...options,
-        headers,
-        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
-      });
-    } catch (error2) {
-      if (attempt >= maxAttempts) {
-        throw new EachlabsError(
-          `Request to ${url2.pathname} failed: ${error2 instanceof Error ? error2.message : String(error2)}`
-        );
-      }
-      await sleep(2 ** attempt * 1e3);
-      continue;
-    }
-    const contentType = response.headers.get("content-type") ?? "";
-    const payload = contentType.includes("application/json") ? await response.json() : await response.text();
-    if (!response.ok) {
-      const retryable = response.status === 429 || response.status >= 500 && method === "GET";
-      if (retryable && attempt < maxAttempts) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const delaySeconds = Math.min(
-          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 2 ** attempt,
-          10
-        );
-        await sleep(delaySeconds * 1e3);
-        continue;
-      }
+  });
+  const nodeStream = createReadStream(filePath).pipe(counter);
+  const body = Readable.toWeb(nodeStream);
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = extra?.signal ? AbortSignal.any([extra.signal, timeoutSignal]) : timeoutSignal;
+  return fetch(url2, {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType2,
+      ...requiredHeaders
+    },
+    body,
+    signal,
+    duplex: "half"
+  });
+}
+
+// src/core/audio.ts
+function combinedSignal(timeoutMs, signal) {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+async function errorPayload(response) {
+  const type = response.headers.get("content-type") ?? "";
+  return type.includes("application/json") ? response.json() : response.text();
+}
+async function responseBytesWithLimit(response, limit) {
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => void 0);
       throw new EachlabsError(
-        `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
-        response.status,
-        payload
+        `Audio response exceeded the ${limit}-byte MCP inline limit.`
       );
     }
-    return payload;
+    chunks.push(value);
   }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
 }
-function appendQuery(path, params) {
-  const url2 = new URL(path, "https://placeholder.local");
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== void 0 && value !== null && value !== "") {
-      url2.searchParams.set(key, String(value));
-    }
+async function transcribeAudio({
+  filePath,
+  model,
+  language,
+  responseFormat,
+  timestampGranularities
+}, signal) {
+  const info = await stat(filePath);
+  if (!info.isFile()) throw new EachlabsError("file_path must point to a regular file.");
+  if (info.size > MAX_AUDIO_UPLOAD_BYTES) {
+    throw new EachlabsError(
+      `Audio file is ${info.size} bytes; the transcription limit is 25 MB.`
+    );
   }
-  return `${url2.pathname}${url2.search}`;
-}
-function normalizePath(path) {
-  return path.startsWith("/") ? path : `/${path}`;
-}
-function flagPath(path, flagKey) {
-  const normalized = normalizePath(path);
-  if (!flagKey) {
-    if (normalized.includes("{flag_key}") || normalized.includes(":flag_key")) {
-      throw new EachlabsError("flag_key is required when the flags path contains a flag key placeholder.");
-    }
-    return normalized;
+  const form = new FormData();
+  form.append(
+    "file",
+    await openAsBlob(filePath, { type: await inferContentType(filePath) })
+  );
+  form.append("model", model);
+  form.append("response_format", responseFormat);
+  if (language) form.append("language", language);
+  for (const granularity of timestampGranularities ?? []) {
+    form.append("timestamp_granularities[]", granularity);
   }
-  const encoded = encodeURIComponent(flagKey);
-  if (normalized.includes("{flag_key}")) return normalized.replaceAll("{flag_key}", encoded);
-  if (normalized.includes(":flag_key")) return normalized.replaceAll(":flag_key", encoded);
-  return `${normalized.replace(/\/+$/, "")}/${encoded}`;
+  const response = await fetch(joinUrl(EACH_API_BASE_URL, "/v1/audio/transcriptions"), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireApiKey()}` },
+    body: form,
+    signal: combinedSignal(3e5, signal)
+  });
+  if (!response.ok) {
+    throw new EachlabsError(
+      `Eachlabs API returned HTTP ${response.status} for /v1/audio/transcriptions`,
+      response.status,
+      await errorPayload(response)
+    );
+  }
+  return response.json();
 }
-function flagActionPath(path, flagKey) {
-  return path.includes("{flag_key}") || path.includes(":flag_key") ? flagPath(path, flagKey) : normalizePath(path);
-}
-function buildFlagEvaluationBody({
-  flag_key,
-  context,
-  default_value,
-  extra,
-  body
-}) {
-  if (body) return body;
-  const payload = {
-    ...extra ?? {}
+async function synthesizeSpeech(payload, signal) {
+  const response = await fetch(joinUrl(EACH_API_BASE_URL, "/v1/audio/speech"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${requireApiKey()}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload),
+    signal: combinedSignal(3e5, signal)
+  });
+  if (!response.ok) {
+    throw new EachlabsError(
+      `Eachlabs API returned HTTP ${response.status} for /v1/audio/speech`,
+      response.status,
+      await errorPayload(response)
+    );
+  }
+  const bytes = await responseBytesWithLimit(response, MAX_AUDIO_RESPONSE_BYTES);
+  return {
+    data: bytes.toString("base64"),
+    mimeType: response.headers.get("content-type")?.split(";")[0] || "audio/mpeg",
+    executionId: response.headers.get("x-eachlabs-execution-id") ?? void 0,
+    requestId: response.headers.get("x-request-id") ?? void 0
   };
-  if (flag_key) payload.flag_key = flag_key;
-  if (context && Object.keys(context).length > 0) payload.context = context;
-  if (default_value !== void 0) payload.default_value = default_value;
-  return payload;
+}
+
+// src/core/schema.ts
+var import_ajv2 = __toESM(require_ajv(), 1);
+var AjvConstructor = import_ajv2.default;
+var ajv = new AjvConstructor({
+  allErrors: true,
+  strict: false,
+  validateFormats: false,
+  allowUnionTypes: true
+});
+var compiledSchemas = /* @__PURE__ */ new WeakMap();
+function checkJsonSchema(schema) {
+  if (!schema || typeof schema !== "object") {
+    return { valid: false, error: "Schema must be a JSON object." };
+  }
+  try {
+    ajv.compile(schema);
+    return { valid: true };
+  } catch (error2) {
+    return {
+      valid: false,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    };
+  }
+}
+function schemaRecord(value) {
+  return value && typeof value === "object" ? value : void 0;
+}
+function getRequestSchema(model) {
+  return model.request_schema ?? model.input_schema ?? model.schema ?? model.latest_version?.request_schema;
+}
+function schemaProperties(schema) {
+  const properties = schemaRecord(schema)?.properties;
+  return properties && typeof properties === "object" ? properties : {};
+}
+function schemaRequired(schema) {
+  const required2 = schemaRecord(schema)?.required;
+  return Array.isArray(required2) ? required2.filter((field) => typeof field === "string") : [];
 }
 function summarizeJsonSchema(schema) {
-  if (!schema || typeof schema !== "object") return schema;
-  const candidate = schema;
-  const properties = candidate.properties;
-  const required2 = Array.isArray(candidate.required) ? candidate.required : [];
-  if (!properties || typeof properties !== "object") {
-    return schema;
-  }
-  const fields = Object.entries(properties).map(
-    ([name, field]) => ({
+  const candidate = schemaRecord(schema);
+  if (!candidate) return schema;
+  const properties = schemaProperties(schema);
+  const required2 = schemaRequired(schema);
+  if (Object.keys(properties).length === 0) return schema;
+  return {
+    type: candidate.type ?? "object",
+    required: required2,
+    fields: Object.entries(properties).map(([name, field]) => ({
       name,
       type: field.type ?? field.anyOf ?? field.oneOf ?? "unknown",
       required: required2.includes(name),
       description: field.description,
       default: field.default,
       enum: field.enum,
-      examples: field.examples ?? field.example
-    })
-  );
-  return {
-    type: candidate.type ?? "object",
-    required: required2,
-    fields
+      examples: field.examples ?? field.example,
+      minimum: field.minimum,
+      maximum: field.maximum,
+      minLength: field.minLength,
+      maxLength: field.maxLength,
+      pattern: field.pattern
+    }))
   };
 }
-function getRequestSchema(model) {
-  return model.request_schema ?? model.input_schema ?? model.schema ?? model.latest_version?.request_schema;
-}
-function schemaProperties(schema) {
-  if (!schema || typeof schema !== "object") return {};
-  const properties = schema.properties;
-  if (!properties || typeof properties !== "object") return {};
-  return properties;
-}
-function schemaRequired(schema) {
-  if (!schema || typeof schema !== "object") return [];
-  const required2 = schema.required;
-  return Array.isArray(required2) ? required2.filter((field) => typeof field === "string") : [];
-}
-function exampleForField(name, field) {
-  if (Array.isArray(field.examples) && field.examples.length > 0) return field.examples[0];
-  if ("example" in field) return field.example;
-  if (Array.isArray(field.enum) && field.enum.length > 0) return field.enum[0];
-  const type = field.type;
+function exampleForSchema(schema, name = "value") {
+  if (Array.isArray(schema.examples) && schema.examples.length > 0) {
+    return schema.examples[0];
+  }
+  if ("example" in schema) return schema.example;
+  if ("default" in schema) return schema.default;
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
+  const alternatives = schema.oneOf ?? schema.anyOf;
+  if (Array.isArray(alternatives)) {
+    const first = alternatives.find((item) => item && typeof item === "object");
+    if (first) return exampleForSchema(first, name);
+  }
+  const type = schema.type;
   const lowerName = name.toLowerCase();
-  const description = String(field.description ?? "").toLowerCase();
-  if (type === "string" || !type) {
-    if (lowerName.includes("prompt")) return "A cinematic product photo of a futuristic sneaker on a clean studio background";
-    if ("default" in field && typeof field.default === "string" && field.default !== "false") {
-      return field.default;
+  const description = String(schema.description ?? "").toLowerCase();
+  if (type === "object" || schema.properties) {
+    const result = {};
+    const required2 = new Set(
+      Array.isArray(schema.required) ? schema.required.filter((item) => typeof item === "string") : []
+    );
+    for (const [key, child] of Object.entries(
+      schema.properties ?? {}
+    )) {
+      if (required2.has(key)) result[key] = exampleForSchema(child, key);
     }
-    if (lowerName.includes("image") || lowerName.includes("url") || description.includes("url")) {
+    return result;
+  }
+  if (type === "array") {
+    const itemSchema = schemaRecord(schema.items);
+    const count = Math.max(0, Number(schema.minItems ?? 0));
+    return itemSchema ? Array.from({ length: count }, () => exampleForSchema(itemSchema, name)) : [];
+  }
+  if (type === "string" || !type) {
+    if (lowerName.includes("prompt")) {
+      return "A cinematic product photo of a futuristic sneaker on a clean studio background";
+    }
+    if (lowerName.includes("image") || lowerName.includes("url") || description.includes("url") || schema.format === "uri") {
       return "https://example.com/input.png";
     }
-    if (lowerName.includes("aspect")) return "1:1";
-    if (lowerName.includes("ratio")) return "1:1";
-    return `example_${name}`;
+    if (lowerName.includes("aspect") || lowerName.includes("ratio")) return "1:1";
+    const minLength = Number(schema.minLength ?? 0);
+    return `example_${name}`.padEnd(minLength, "x");
   }
-  if ("default" in field) return field.default;
-  if (type === "number") return field.minimum ?? 1;
-  if (type === "integer") return field.minimum ?? 1;
+  if (type === "integer") return Math.ceil(Number(schema.minimum ?? 1));
+  if (type === "number") return Number(schema.minimum ?? 1);
   if (type === "boolean") return false;
-  if (type === "array") return [];
-  if (type === "object") return {};
+  if (type === "null") return null;
   return null;
 }
 function generateExampleInput(schema, includeOptional, overrides) {
@@ -23550,119 +24000,915 @@ function generateExampleInput(schema, includeOptional, overrides) {
   const input = {};
   for (const [name, field] of Object.entries(properties)) {
     if (includeOptional || required2.has(name)) {
-      input[name] = exampleForField(name, field);
+      input[name] = exampleForSchema(field, name);
     }
   }
   return { ...input, ...overrides };
 }
-function validateAgainstSchema(schema, input) {
-  const properties = schemaProperties(schema);
-  const required2 = schemaRequired(schema);
-  const errors = [];
-  const warnings = [];
-  for (const field of required2) {
-    if (!(field in input) || input[field] === void 0 || input[field] === null || input[field] === "") {
-      errors.push({ field, message: "Required field is missing or empty." });
-    }
-  }
-  for (const [field, value] of Object.entries(input)) {
-    const property = properties[field];
-    if (!property) {
-      warnings.push({ field, message: "Field is not present in the documented request schema." });
-      continue;
-    }
-    const expected = property.type;
-    const actual = Array.isArray(value) ? "array" : value === null ? "null" : typeof value;
-    if (typeof expected === "string") {
-      const normalizedExpected = expected === "integer" ? "number" : expected;
-      if (expected !== "null" && actual !== normalizedExpected) {
-        errors.push({ field, message: "Field type does not match schema.", expected, actual });
-      }
-      if (expected === "integer" && typeof value === "number" && !Number.isInteger(value)) {
-        errors.push({ field, message: "Field must be an integer.", expected, actual });
-      }
-    }
-    if (Array.isArray(property.enum) && !property.enum.includes(value)) {
-      errors.push({ field, message: "Field is not one of the documented enum values.", expected: property.enum, actual: value });
-    }
-  }
+function formatAjvError(error2) {
+  const missing = error2.keyword === "required" ? String(error2.params.missingProperty ?? "") : "";
+  const field = [error2.instancePath.replace(/^\//, "").replaceAll("/", "."), missing].filter(Boolean).join(".");
   return {
-    valid: errors.length === 0,
-    errors,
+    field: field || "$",
+    message: error2.message ?? `Schema validation failed (${error2.keyword}).`,
+    expected: error2.params
+  };
+}
+function validateAgainstSchema(schema, input) {
+  if (!schema || typeof schema !== "object") {
+    return {
+      valid: true,
+      errors: [],
+      warnings: [{ field: "$", message: "No documented request schema is available." }]
+    };
+  }
+  let validate = compiledSchemas.get(schema);
+  try {
+    if (!validate) {
+      const compiled = ajv.compile(schema);
+      compiledSchemas.set(schema, compiled);
+      validate = compiled;
+    }
+  } catch (error2) {
+    return {
+      valid: true,
+      errors: [],
+      warnings: [
+        {
+          field: "$",
+          message: `The documented schema could not be compiled: ${error2 instanceof Error ? error2.message : String(error2)}`
+        }
+      ]
+    };
+  }
+  if (!validate) {
+    throw new Error("Schema validator was not initialized.");
+  }
+  const valid = Boolean(validate(input));
+  const properties = schemaProperties(schema);
+  const warnings = Object.keys(input).filter((field) => !properties[field]).map((field) => ({
+    field,
+    message: "Field is not present in the documented request schema."
+  }));
+  return {
+    valid,
+    errors: (validate.errors ?? []).map(formatAjvError),
     warnings
   };
 }
-var modelCache;
-async function getAllModels(maxModels) {
-  const cached2 = modelCache;
-  if (cached2 && Date.now() - cached2.fetchedAt < MODEL_CACHE_TTL_MS && (cached2.complete || cached2.models.length >= maxModels)) {
-    return cached2.models.slice(0, maxModels);
-  }
-  const pageSize = 100;
-  const models = [];
-  let complete = false;
-  for (let offset = 0; models.length < maxModels; offset += pageSize) {
-    const page = await eachRequest(appendQuery("/v1/models", { limit: pageSize, offset }), {
-      auth: false
-    });
-    if (!Array.isArray(page) || page.length === 0) {
-      complete = true;
-      break;
-    }
-    models.push(...page);
-    if (page.length < pageSize) {
-      complete = true;
-      break;
-    }
-  }
-  modelCache = { models, complete, fetchedAt: Date.now() };
-  return models.slice(0, maxModels);
+
+// src/core/codegen.ts
+function json(value) {
+  return JSON.stringify(value, null, 2);
 }
-function trimModel(model) {
+function tsType(schema) {
+  if (Array.isArray(schema.enum)) {
+    return schema.enum.map((item) => JSON.stringify(item)).join(" | ");
+  }
+  if (schema.type === "array") {
+    return `${tsType(schema.items ?? {})}[]`;
+  }
+  if (schema.type === "object" || schema.properties) {
+    const required2 = new Set(
+      Array.isArray(schema.required) ? schema.required : []
+    );
+    return `{ ${Object.entries(
+      schema.properties ?? {}
+    ).map(
+      ([name, child]) => `${JSON.stringify(name)}${required2.has(name) ? "" : "?"}: ${tsType(child)}`
+    ).join("; ")} }`;
+  }
+  if (schema.type === "integer" || schema.type === "number") return "number";
+  if (schema.type === "boolean") return "boolean";
+  if (schema.type === "null") return "null";
+  return "string";
+}
+function zodType(schema) {
+  if (Array.isArray(schema.enum) && schema.enum.every((item) => typeof item === "string")) {
+    return `z.enum([${schema.enum.map((item) => JSON.stringify(item)).join(", ")}])`;
+  }
+  let expression;
+  if (schema.type === "array") {
+    expression = `z.array(${zodType(schema.items ?? {})})`;
+  } else if (schema.type === "object" || schema.properties) {
+    const required2 = new Set(
+      Array.isArray(schema.required) ? schema.required : []
+    );
+    expression = `z.object({
+${Object.entries(
+      schema.properties ?? {}
+    ).map(([name, child]) => {
+      const childExpression = zodType(child);
+      return `  ${JSON.stringify(name)}: ${childExpression}${required2.has(name) ? "" : ".optional()"},`;
+    }).join("\n")}
+})`;
+  } else if (schema.type === "integer") {
+    expression = "z.number().int()";
+  } else if (schema.type === "number") {
+    expression = "z.number()";
+  } else if (schema.type === "boolean") {
+    expression = "z.boolean()";
+  } else {
+    expression = "z.string()";
+  }
+  if (typeof schema.minimum === "number") expression += `.min(${schema.minimum})`;
+  if (typeof schema.maximum === "number") expression += `.max(${schema.maximum})`;
+  if (typeof schema.minLength === "number") expression += `.min(${schema.minLength})`;
+  if (typeof schema.maxLength === "number") expression += `.max(${schema.maxLength})`;
+  return expression;
+}
+function typescriptWebhookHandler(framework) {
+  const verify = `import { timingSafeEqual } from "node:crypto";
+
+function validWebhookSecret(received: string | null, expected: string): boolean {
+  if (!received) return false;
+  const left = Buffer.from(received);
+  const right = Buffer.from(expected);
+  return left.length === right.length && timingSafeEqual(left, right);
+}`;
+  if (framework === "nextjs") {
+    return `${verify}
+
+export async function POST(request: Request) {
+  if (!validWebhookSecret(request.headers.get("x-webhook-secret"), process.env.EACH_WEBHOOK_SECRET!)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const event = await request.json();
+  console.log(event);
+  return Response.json({ received: true });
+}`;
+  }
+  return `import express from "express";
+${verify}
+
+const app = express();
+
+// Express-compatible handler
+app.post("/webhooks/eachlabs", express.json(), (request, response) => {
+  if (!validWebhookSecret(request.get("x-webhook-secret") ?? null, process.env.EACH_WEBHOOK_SECRET!)) {
+    return response.sendStatus(401);
+  }
+  console.log(request.body);
+  response.json({ received: true });
+});
+
+app.listen(3000);`;
+}
+function pythonWebhookHandler(framework) {
+  if (framework === "flask") {
+    return `import hmac
+import os
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.post("/webhooks/eachlabs")
+def eachlabs_webhook():
+    received = request.headers.get("X-Webhook-Secret", "")
+    if not hmac.compare_digest(received, os.environ["EACH_WEBHOOK_SECRET"]):
+        return ("Unauthorized", 401)
+    print(request.get_json())
+    return jsonify(received=True)`;
+  }
+  return `import hmac
+import os
+from fastapi import FastAPI, Header, HTTPException, Request
+
+app = FastAPI()
+
+@app.post("/webhooks/eachlabs")
+async def eachlabs_webhook(request: Request, x_webhook_secret: str = Header(default="")):
+    if not hmac.compare_digest(x_webhook_secret, os.environ["EACH_WEBHOOK_SECRET"]):
+        raise HTTPException(status_code=401)
+    print(await request.json())
+    return {"received": True}`;
+}
+function generateTypescript(model, schema, example, mode, includeTypes, includeZod) {
+  const typeBlock = includeTypes ? `type ModelInput = ${tsType(schema)};
+` : "";
+  const zodBlock = includeZod ? `import { z } from "zod";
+
+const ModelInputSchema = ${zodType(schema)};
+` : "";
+  const endpoint = mode === "synchronous" ? "/v1/prediction/run" : "/v1/prediction";
+  const webhookFields = mode === "webhook" ? `,
+    webhook_url: process.env.EACH_WEBHOOK_URL,
+    webhook_secret: process.env.EACH_WEBHOOK_SECRET` : "";
+  const polling = mode === "async_polling" ? `
+const predictionId = created.predictionID;
+for (;;) {
+  const statusResponse = await fetch(\`\${API_BASE}/v1/prediction/\${predictionId}\`, { headers });
+  if (!statusResponse.ok) throw new Error(await statusResponse.text());
+  const prediction = await statusResponse.json();
+  if (["success", "failed", "error", "cancelled"].includes(prediction.status)) {
+    console.log(prediction);
+    break;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+}` : `
+console.log(created);`;
+  return `${zodBlock}${typeBlock}
+const API_BASE = "https://api.eachlabs.ai";
+const headers = {
+  Authorization: \`Bearer \${process.env.EACH_API_KEY}\`,
+  "Content-Type": "application/json",
+};
+
+const input${includeTypes ? ": ModelInput" : ""} = ${json(example)};
+${includeZod ? "ModelInputSchema.parse(input);\n" : ""}
+const response = await fetch(\`\${API_BASE}${endpoint}\`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    model: ${JSON.stringify(model)},
+    input${webhookFields}
+  }),
+});
+if (!response.ok) throw new Error(await response.text());
+const created = await response.json();
+${polling}`.trim();
+}
+function generatePython(model, example, mode) {
+  const endpoint = mode === "synchronous" ? "/v1/prediction/run" : "/v1/prediction";
+  const webhookFields = mode === "webhook" ? `,
+    "webhook_url": os.environ["EACH_WEBHOOK_URL"],
+    "webhook_secret": os.environ["EACH_WEBHOOK_SECRET"]` : "";
+  const polling = mode === "async_polling" ? `
+prediction_id = created["predictionID"]
+while True:
+    prediction = requests.get(f"{API_BASE}/v1/prediction/{prediction_id}", headers=headers).json()
+    if prediction["status"] in ("success", "failed", "error", "cancelled"):
+        print(prediction)
+        break
+    time.sleep(3)` : "\nprint(created)";
+  return `import json
+import os
+import time
+import requests
+
+API_BASE = "https://api.eachlabs.ai"
+headers = {
+    "Authorization": f"Bearer {os.environ['EACH_API_KEY']}",
+    "Content-Type": "application/json",
+}
+input_data = json.loads(r'''${json(example)}''')
+payload = {
+    "model": ${JSON.stringify(model)},
+    "input": input_data${webhookFields}
+}
+response = requests.post(f"{API_BASE}${endpoint}", headers=headers, json=payload)
+response.raise_for_status()
+created = response.json()
+${polling}`.trim();
+}
+function generateCurl(model, example, mode) {
+  const endpoint = mode === "synchronous" ? "/v1/prediction/run" : "/v1/prediction";
+  const payload = { model, input: example };
+  if (mode === "webhook") {
+    payload.webhook_url = "https://your-app.example/webhooks/eachlabs";
+    payload.webhook_secret = "replace-with-a-shared-secret";
+  }
+  return `curl --fail-with-body -X POST "https://api.eachlabs.ai${endpoint}" \\
+  -H "Authorization: Bearer $EACH_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  --data '${JSON.stringify(payload, null, 2)}'`;
+}
+function generateGo(model, example, mode) {
+  const endpoint = mode === "synchronous" ? "/v1/prediction/run" : "/v1/prediction";
+  const webhookFields = mode === "webhook" ? `
+	payload["webhook_url"] = os.Getenv("EACH_WEBHOOK_URL")
+	payload["webhook_secret"] = os.Getenv("EACH_WEBHOOK_SECRET")` : "";
+  const polling = mode === "async_polling" ? `
+	predictionID, _ := created["predictionID"].(string)
+	for {
+		pollRequest, _ := http.NewRequest("GET", apiBase+"/v1/prediction/"+predictionID, nil)
+		pollRequest.Header.Set("Authorization", "Bearer "+os.Getenv("EACH_API_KEY"))
+		pollResponse, err := client.Do(pollRequest)
+		if err != nil { panic(err) }
+		var prediction map[string]any
+		if err := json.NewDecoder(pollResponse.Body).Decode(&prediction); err != nil { panic(err) }
+		pollResponse.Body.Close()
+		status, _ := prediction["status"].(string)
+		if status == "success" || status == "failed" || status == "error" || status == "cancelled" {
+			fmt.Printf("%+v\\n", prediction)
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}` : `
+	fmt.Printf("%+v\\n", created)`;
+  return `package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"time"
+)
+
+const apiBase = "https://api.eachlabs.ai"
+const inputJSON = ${JSON.stringify(json(example))}
+
+func main() {
+	var input map[string]any
+	if err := json.Unmarshal([]byte(inputJSON), &input); err != nil { panic(err) }
+	payload := map[string]any{
+		"model": ${JSON.stringify(model)},
+		"input": input,
+	}${webhookFields}
+	body, _ := json.Marshal(payload)
+	request, _ := http.NewRequest("POST", apiBase+${JSON.stringify(endpoint)}, bytes.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+os.Getenv("EACH_API_KEY"))
+	request.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 5 * time.Minute}
+	response, err := client.Do(request)
+	if err != nil { panic(err) }
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		panic(fmt.Sprintf("EachLabs returned HTTP %d", response.StatusCode))
+	}
+	var created map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil { panic(err) }${polling}
+}`.trim();
+}
+function generateIntegrationCode({
+  model,
+  schema,
+  language,
+  mode,
+  framework = "none",
+  includeTypes = true,
+  includeZod = false
+}) {
+  const example = generateExampleInput(schema, false, {});
+  const code = language === "typescript" ? generateTypescript(
+    model,
+    schema,
+    example,
+    mode,
+    includeTypes,
+    includeZod
+  ) : language === "python" ? generatePython(model, example, mode) : language === "go" ? generateGo(model, example, mode) : generateCurl(model, example, mode);
+  const webhookHandler = mode !== "webhook" || framework === "none" || language === "curl" ? void 0 : language === "typescript" ? typescriptWebhookHandler(framework) : language === "python" ? pythonWebhookHandler(framework) : void 0;
   return {
-    title: model.title,
-    slug: model.slug,
-    version: model.version,
-    output_type: model.output_type,
-    request_fields: Object.keys(schemaProperties(getRequestSchema(model)))
+    model,
+    language,
+    mode,
+    framework,
+    required_fields: schemaRequired(schema),
+    available_fields: Object.keys(schemaProperties(schema)),
+    code,
+    webhook_handler: webhookHandler,
+    notes: [
+      "Generated from the current live model request schema.",
+      "The deprecated prediction version field is intentionally omitted.",
+      mode === "webhook" ? "X-Webhook-Secret carries the configured secret verbatim; compare it in constant time." : void 0
+    ].filter(Boolean)
   };
 }
-function scoreModel(model, terms, requiredFields, outputType) {
-  const title = String(model.title ?? "").toLowerCase();
-  const slug = String(model.slug ?? "").toLowerCase();
-  const provider = String(model.provider ?? "").toLowerCase();
-  const haystack = `${title} ${slug} ${provider}`;
+
+// src/core/developer-tools.ts
+function record2(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function numberValue(value) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function categoryValue(value) {
+  if (typeof value === "string") return value;
+  const item = record2(value);
+  const category = item?.slug ?? item?.Slug ?? item?.name ?? item?.Name;
+  return category === void 0 ? void 0 : String(category);
+}
+function requiredFields(model) {
+  const schema = record2(getRequestSchema(model));
+  return Array.isArray(schema?.required) ? schema.required.map(String) : [];
+}
+function modelDeveloperSummary(model) {
   const schema = getRequestSchema(model);
-  const fields = new Set(Object.keys(schemaProperties(schema)));
-  let score = 0;
-  for (const term of terms) {
-    if (!term) continue;
-    if (haystack.includes(term)) score += 4;
-    for (const field of fields) {
-      if (field.toLowerCase().includes(term)) score += 1;
+  const p50 = numberValue(model.p50);
+  return {
+    title: model.title ?? model.name,
+    slug: model.slug,
+    provider: model.provider_name ?? model.provider ?? null,
+    category: categoryValue(model.category) ?? null,
+    description: typeof model.description === "string" ? model.description.slice(0, 320) : null,
+    version: model.version,
+    output_type: model.output_type,
+    p50_seconds: p50 > 0 ? p50 : null,
+    required_fields: requiredFields(model),
+    request_fields: Object.keys(schemaProperties(schema))
+  };
+}
+function compactFieldSchema(value) {
+  const field = record2(value) ?? {};
+  return {
+    type: field.type ?? null,
+    required: false,
+    default: field.default ?? null,
+    enum: Array.isArray(field.enum) ? field.enum : null,
+    minimum: field.minimum ?? null,
+    maximum: field.maximum ?? null,
+    min_items: field.minItems ?? null,
+    max_items: field.maxItems ?? null
+  };
+}
+function compareModelRecords(models, required2 = [], focus = []) {
+  const summaries = models.map(modelDeveloperSummary);
+  const fieldSets = summaries.map(
+    (summary) => new Set(summary.request_fields)
+  );
+  const sharedFields = fieldSets.length === 0 ? [] : [...fieldSets[0]].filter(
+    (field) => fieldSets.every((fields) => fields.has(field))
+  );
+  const allFields = [...new Set(summaries.flatMap((item) => item.request_fields))];
+  const usefulDefaults = [
+    "prompt",
+    "negative_prompt",
+    "image_url",
+    "image_urls",
+    "aspect_ratio",
+    "duration",
+    "seed",
+    "num_images",
+    "output_format",
+    "enable_safety_checker"
+  ];
+  const matrixFields = [
+    .../* @__PURE__ */ new Set([
+      ...required2,
+      ...focus,
+      ...usefulDefaults.filter((field) => allFields.includes(field))
+    ])
+  ];
+  const compared = models.map((model, index) => {
+    const summary = summaries[index];
+    const properties = schemaProperties(getRequestSchema(model));
+    const requiredByModel = new Set(summary.required_fields);
+    const missingRequiredFields = required2.filter(
+      (field) => !summary.request_fields.includes(field)
+    );
+    return {
+      ...summary,
+      fits_requirements: missingRequiredFields.length === 0,
+      missing_required_fields: missingRequiredFields,
+      fields: Object.fromEntries(
+        matrixFields.map((field) => [
+          field,
+          properties[field] ? {
+            ...compactFieldSchema(properties[field]),
+            required: requiredByModel.has(field)
+          } : null
+        ])
+      )
+    };
+  });
+  const withLatency = compared.filter(
+    (item) => typeof item.p50_seconds === "number"
+  );
+  const fastest = withLatency.sort(
+    (a, b) => Number(a.p50_seconds) - Number(b.p50_seconds)
+  )[0];
+  return {
+    models: compared,
+    shared_fields: sharedFields,
+    differing_fields: allFields.filter(
+      (field) => !sharedFields.includes(field)
+    ),
+    fastest_by_catalog_p50: fastest ? { slug: fastest.slug, p50_seconds: fastest.p50_seconds } : null,
+    note: "Catalog p50 is a latency signal, not a price or quality guarantee. This comparison does not run predictions or spend credits."
+  };
+}
+function statusKind(status) {
+  if (["success", "completed"].includes(status)) return "successful";
+  if (["error", "failed"].includes(status)) return "failed";
+  return "other";
+}
+function groupKey(execution, groupBy) {
+  if (groupBy === "workflow") {
+    return String(execution.workflow_id ?? "direct-model");
+  }
+  if (groupBy === "status") {
+    return String(execution.status ?? "unknown");
+  }
+  return String(
+    execution.requested_model ?? execution.model ?? "unknown-model"
+  );
+}
+function summarizeExecutions(executions, groupBy = "model", top = 10) {
+  const groups = /* @__PURE__ */ new Map();
+  let totalCost = 0;
+  let totalRuntime = 0;
+  let successful = 0;
+  let failed = 0;
+  for (const execution of executions) {
+    const cost = numberValue(
+      execution.execution_cost ?? execution.cost ?? record2(execution.metrics)?.cost
+    );
+    const runtime = numberValue(
+      execution.run_time ?? execution.runtime ?? record2(execution.metrics)?.predict_time
+    );
+    const kind = statusKind(
+      String(execution.status ?? "").toLowerCase()
+    );
+    totalCost += cost;
+    totalRuntime += runtime;
+    if (kind === "successful") successful++;
+    if (kind === "failed") failed++;
+    const key = groupKey(execution, groupBy);
+    const current = groups.get(key) ?? {
+      executions: 0,
+      total_cost_usd: 0,
+      total_runtime_seconds: 0,
+      successful: 0,
+      failed: 0
+    };
+    current.executions++;
+    current.total_cost_usd += cost;
+    current.total_runtime_seconds += runtime;
+    if (kind === "successful") current.successful++;
+    if (kind === "failed") current.failed++;
+    groups.set(key, current);
+  }
+  const round = (value) => Number(value.toFixed(6));
+  const summarizedGroups = [...groups.entries()].map(([key, value]) => ({
+    key,
+    ...value,
+    total_cost_usd: round(value.total_cost_usd),
+    total_runtime_seconds: round(value.total_runtime_seconds),
+    average_cost_usd: round(value.total_cost_usd / value.executions),
+    average_runtime_seconds: round(
+      value.total_runtime_seconds / value.executions
+    )
+  })).sort(
+    (a, b) => b.total_cost_usd - a.total_cost_usd || b.executions - a.executions
+  ).slice(0, top);
+  return {
+    sampled_executions: executions.length,
+    total_cost_usd: round(totalCost),
+    total_runtime_seconds: round(totalRuntime),
+    average_cost_usd: executions.length > 0 ? round(totalCost / executions.length) : 0,
+    average_runtime_seconds: executions.length > 0 ? round(totalRuntime / executions.length) : 0,
+    successful,
+    failed,
+    other: executions.length - successful - failed,
+    success_rate: executions.length > 0 ? round(successful / executions.length) : null,
+    grouped_by: groupBy,
+    groups: summarizedGroups,
+    note: "Summary excludes prompts, inputs, outputs, and logs. Costs reflect returned execution history only."
+  };
+}
+function diagnosticText(value) {
+  const item = record2(value);
+  const candidates = [
+    item?.error_classification,
+    item?.error,
+    item?.message,
+    item?.logs,
+    record2(item?.output)?.error,
+    Array.isArray(item?.output) ? record2(item?.output[0])?.error : void 0
+  ];
+  return candidates.filter((candidate) => typeof candidate === "string").join(" ").slice(0, 4e3).toLowerCase();
+}
+function diagnoseRunRecord(value) {
+  const item = record2(value) ?? {};
+  const status = String(item.status ?? "unknown").toLowerCase();
+  const details = diagnosticText(item);
+  let diagnosis = "unknown_failure";
+  let safeToRetry = "unknown";
+  let actions = [
+    "Inspect the returned status, logs, and upstream error details.",
+    "Check execution history before creating another paid run."
+  ];
+  if (["success", "completed"].includes(status)) {
+    diagnosis = "healthy";
+    safeToRetry = "no";
+    actions = ["No retry is needed; inspect the output and reported cost."];
+  } else if (status === "cancelled") {
+    diagnosis = "cancelled";
+    safeToRetry = "unknown";
+    actions = [
+      "Confirm whether cancellation was user-requested or provider-side.",
+      "Check execution history before starting a replacement run."
+    ];
+  } else if (/moderation|nsfw|safety|content.?policy/.test(details)) {
+    diagnosis = "content_moderation";
+    safeToRetry = "no";
+    actions = [
+      "Revise the prompt or input media to comply with the selected model policy.",
+      "Do not disable the safety checker unless the user explicitly requests it and the model supports it."
+    ];
+  } else if (/invalid|validation|schema|required|unprocessable|422/.test(details)) {
+    diagnosis = "invalid_input";
+    safeToRetry = "no";
+    actions = [
+      "Fetch the current model request schema.",
+      "Validate the input locally, then retry only after correcting the payload."
+    ];
+  } else if (/rate.?limit|429|too many requests/.test(details)) {
+    diagnosis = "rate_limited";
+    safeToRetry = "yes";
+    actions = [
+      "Honor Retry-After or wait with bounded backoff.",
+      "Reuse the existing run ID if one was created; do not duplicate a paid write blindly."
+    ];
+  } else if (/timeout|timed out|deadline/.test(details)) {
+    diagnosis = "execution_timeout";
+    safeToRetry = "unknown";
+    actions = [
+      "Check whether the original run is still present in execution history.",
+      "For long jobs, use async mode and poll instead of creating another synchronous run."
+    ];
+  } else if (/provider.?auth|unauthorized provider|provider credential/.test(details)) {
+    diagnosis = "provider_auth";
+    safeToRetry = "no";
+    actions = [
+      "Treat this as an upstream provider credential/routing issue.",
+      "Do not rotate the EachLabs API key unless the API itself returned an authentication error."
+    ];
+  } else if (/unavailable|overloaded|502|503|504|provider.?error/.test(details)) {
+    diagnosis = "provider_unavailable";
+    safeToRetry = "unknown";
+    actions = [
+      "Check execution history to determine whether the write was accepted.",
+      "Retry only after confirming no paid run is already in progress."
+    ];
+  } else if (/unauthorized|invalid api key|401|forbidden|403/.test(details)) {
+    diagnosis = "eachlabs_auth";
+    safeToRetry = "no";
+    actions = [
+      "Verify the server-side EachLabs API key and Bearer authentication.",
+      "Do not expose or paste the key into prompts or logs."
+    ];
+  }
+  return {
+    status,
+    diagnosis,
+    safe_to_retry: safeToRetry,
+    recommended_actions: actions,
+    evidence_present: details.length > 0,
+    note: "This is deterministic local triage from the returned run record. It does not create or retry a run."
+  };
+}
+function fieldMap(schema, prefix = "", parentRequired = /* @__PURE__ */ new Set(), result = /* @__PURE__ */ new Map()) {
+  const item = record2(schema) ?? {};
+  const properties = record2(item.properties) ?? {};
+  const required2 = new Set(
+    Array.isArray(item.required) ? item.required.map(String) : []
+  );
+  for (const [name, value] of Object.entries(properties)) {
+    const path2 = prefix ? `${prefix}.${name}` : name;
+    const field = record2(value) ?? {};
+    result.set(path2, { ...field, required: required2.has(name) });
+    if (field.type === "object" || field.properties) {
+      fieldMap(field, path2, required2, result);
     }
   }
-  for (const field of requiredFields) {
-    if (fields.has(field)) score += 6;
-  }
-  if (outputType && String(model.output_type ?? "").toLowerCase().includes(outputType.toLowerCase())) {
-    score += 5;
-  }
-  return score;
+  void parentRequired;
+  return result;
 }
-async function getModelBySlug(slug) {
-  return eachRequest(appendQuery("/v1/model", { slug }));
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
-async function callOfficialDocsTool(name, args) {
-  const client = new Client({ name: "eachlabs-unofficial-docs-proxy", version: "0.2.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(EACH_DOCS_MCP_URL));
-  try {
-    await client.connect(transport);
-    return await client.callTool({ name, arguments: args });
-  } finally {
-    await client.close().catch(() => void 0);
+function diffModelSchemas(baseline, current) {
+  const before = fieldMap(baseline);
+  const after = fieldMap(current);
+  const changes = [];
+  for (const [path2, field] of before) {
+    const next = after.get(path2);
+    if (!next) {
+      changes.push({ path: path2, kind: "field_removed", breaking: true });
+      continue;
+    }
+    if (field.type !== next.type) {
+      changes.push({
+        path: path2,
+        kind: "type_changed",
+        breaking: true,
+        before: field.type,
+        after: next.type
+      });
+    }
+    if (!field.required && next.required) {
+      changes.push({ path: path2, kind: "became_required", breaking: true });
+    } else if (field.required && !next.required) {
+      changes.push({ path: path2, kind: "became_optional", breaking: false });
+    }
+    const beforeEnum = Array.isArray(field.enum) ? field.enum : void 0;
+    const afterEnum = Array.isArray(next.enum) ? next.enum : void 0;
+    if (!sameJson(beforeEnum, afterEnum)) {
+      const removed = beforeEnum?.filter(
+        (value) => !afterEnum?.some((candidate) => sameJson(candidate, value))
+      ) ?? [];
+      changes.push({
+        path: path2,
+        kind: "enum_changed",
+        breaking: removed.length > 0 || beforeEnum === void 0 && afterEnum !== void 0,
+        before: beforeEnum,
+        after: afterEnum
+      });
+    }
+    for (const key of ["minimum", "maximum", "minLength", "maxLength", "format", "default"]) {
+      if (sameJson(field[key], next[key])) continue;
+      const beforeValue = field[key];
+      const afterValue = next[key];
+      const lowerBound = key === "minimum" || key === "minLength";
+      const upperBound = key === "maximum" || key === "maxLength";
+      const breaking2 = key === "format" && afterValue !== void 0 || lowerBound && afterValue !== void 0 && (beforeValue === void 0 || numberValue(afterValue) > numberValue(beforeValue)) || upperBound && afterValue !== void 0 && (beforeValue === void 0 || numberValue(afterValue) < numberValue(beforeValue));
+      changes.push({
+        path: path2,
+        kind: `${key}_changed`,
+        breaking: breaking2,
+        before: field[key],
+        after: next[key]
+      });
+    }
   }
+  for (const [path2, field] of after) {
+    if (!before.has(path2)) {
+      changes.push({
+        path: path2,
+        kind: "field_added",
+        breaking: field.required
+      });
+    }
+  }
+  const breaking = changes.filter((change) => change.breaking);
+  return {
+    compatible: breaking.length === 0,
+    breaking_change_count: breaking.length,
+    change_count: changes.length,
+    changes,
+    note: "Breaking classification is a local compatibility heuristic. Confirm provider semantics before deployment."
+  };
 }
+function workflowSteps(definition) {
+  const item = record2(definition);
+  return Array.isArray(item?.steps) ? item.steps.map(record2).filter((step) => Boolean(step)) : [];
+}
+function diffWorkflowDefinitions(before, after) {
+  const beforeRecord = record2(before) ?? {};
+  const afterRecord = record2(after) ?? {};
+  const left = new Map(
+    workflowSteps(before).map((step) => [String(step.id ?? ""), step])
+  );
+  const right = new Map(
+    workflowSteps(after).map((step) => [String(step.id ?? ""), step])
+  );
+  const changes = [];
+  for (const [id, step] of left) {
+    const next = right.get(id);
+    if (!next) {
+      changes.push({ step_id: id, kind: "step_removed", breaking: true });
+      continue;
+    }
+    for (const key of ["type", "model"]) {
+      if (!sameJson(step[key], next[key])) {
+        changes.push({
+          step_id: id,
+          kind: `${key}_changed`,
+          breaking: true,
+          before: step[key],
+          after: next[key]
+        });
+      }
+    }
+    if (!sameJson(step.params, next.params)) {
+      changes.push({
+        step_id: id,
+        kind: "params_changed",
+        breaking: false
+      });
+    }
+  }
+  for (const id of right.keys()) {
+    if (!left.has(id)) {
+      changes.push({ step_id: id, kind: "step_added", breaking: false });
+    }
+  }
+  const inputSchema = diffModelSchemas(
+    beforeRecord.input_schema ?? {},
+    afterRecord.input_schema ?? {}
+  );
+  const versionChanged = !sameJson(beforeRecord.version, afterRecord.version);
+  return {
+    compatible: changes.every((change) => change.breaking !== true) && inputSchema.compatible,
+    version_changed: versionChanged,
+    before_version: beforeRecord.version ?? null,
+    after_version: afterRecord.version ?? null,
+    step_changes: changes,
+    input_schema: inputSchema,
+    note: "Workflow diff is local and does not mutate or execute either definition."
+  };
+}
+function debugValue(value, depth = 0) {
+  if (depth > 4) return "[truncated]";
+  if (typeof value === "string") return value.slice(0, 2e3);
+  if (Array.isArray(value)) return value.slice(0, 20).map((item2) => debugValue(item2, depth + 1));
+  const item = record2(value);
+  if (!item) return value;
+  const blocked = /api.?key|authorization|password|secret|token|prompt|input|output|logs|media/i;
+  return Object.fromEntries(
+    Object.entries(item).filter(([key]) => !blocked.test(key)).slice(0, 80).map(([key, child]) => [key, debugValue(child, depth + 1)])
+  );
+}
+function buildDebugBundle(kind, run, serverVersion) {
+  return {
+    format: "eachlabs-debug-bundle/v1",
+    server_version: serverVersion,
+    kind,
+    diagnosis: diagnoseRunRecord(run),
+    run: debugValue(run),
+    privacy: "Prompts, inputs, outputs, logs, media URLs, credentials, secrets, and tokens are excluded."
+  };
+}
+
+// src/core/security.ts
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+function privateIpv4(address) {
+  const parts = address.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+    return true;
+  }
+  const [a, b] = parts;
+  return a === 0 || a === 10 || a === 127 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a === 100 && b >= 64 && b <= 127 || a >= 224;
+}
+function privateIpv6(address) {
+  const normalized = address.toLowerCase().split("%")[0];
+  if (normalized === "::" || normalized === "::1") return true;
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true;
+  if (/^fe[89ab]/.test(normalized)) return true;
+  if (normalized.startsWith("::ffff:")) {
+    const mapped = normalized.slice("::ffff:".length);
+    return isIP(mapped) === 4 ? privateIpv4(mapped) : true;
+  }
+  return false;
+}
+function isPrivateAddress(address) {
+  const family = isIP(address);
+  if (family === 4) return privateIpv4(address);
+  if (family === 6) return privateIpv6(address);
+  return true;
+}
+function parsePublicHttpsUrl(raw) {
+  const url2 = new URL(raw);
+  if (url2.protocol !== "https:") {
+    throw new Error("Media URLs must use HTTPS.");
+  }
+  if (url2.username || url2.password) {
+    throw new Error("Media URLs must not contain credentials.");
+  }
+  const hostname2 = url2.hostname.toLowerCase().replace(/\.$/, "").replace(/^\[|\]$/g, "");
+  if (hostname2 === "localhost" || hostname2.endsWith(".localhost") || hostname2.endsWith(".local") || hostname2.endsWith(".internal")) {
+    throw new Error("Local and internal media hosts are blocked.");
+  }
+  if (isIP(hostname2) && isPrivateAddress(hostname2)) {
+    throw new Error("Private media addresses are blocked.");
+  }
+  return url2;
+}
+async function assertSafeFetchUrl(raw, lookupFn = lookup) {
+  const url2 = parsePublicHttpsUrl(raw);
+  const hostname2 = url2.hostname.replace(/^\[|\]$/g, "");
+  if (!isIP(hostname2)) {
+    const addresses = await lookupFn(hostname2, {
+      all: true,
+      verbatim: true
+    });
+    if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
+      throw new Error("Media host resolves to a private or invalid address.");
+    }
+  }
+  return url2;
+}
+async function safeMediaFetch(raw, init = {}) {
+  let current = raw;
+  for (let redirects = 0; redirects <= 3; redirects++) {
+    const url2 = await assertSafeFetchUrl(current);
+    const response = await fetch(url2, { ...init, redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      return response;
+    }
+    const location = response.headers.get("location");
+    await response.body?.cancel().catch(() => void 0);
+    if (!location || redirects === 3) {
+      throw new Error("Media redirect limit exceeded.");
+    }
+    current = new URL(location, url2).href;
+  }
+  throw new Error("Media redirect limit exceeded.");
+}
+function rawRequestPolicyError(method, authenticated) {
+  if (!authenticated && !["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) {
+    return "Unauthenticated raw write requests are blocked. Use a first-class public workflow tool or enable authenticated access.";
+  }
+  return void 0;
+}
+
+// src/core/media.ts
 var IMAGE_MIME_BY_EXTENSION = {
   png: "image/png",
   jpg: "image/jpeg",
@@ -23690,46 +24936,995 @@ function urlExtension(url2) {
     return "";
   }
 }
-function collectMediaUrls(value, found = []) {
+function isMediaHintKey(key) {
+  return /(^|_)(output|result|media|image|video|audio|file|url|urls)($|_)/i.test(
+    key
+  );
+}
+function looksLikeSignedUrl(raw) {
+  try {
+    const url2 = new URL(raw);
+    return [...url2.searchParams.keys()].some(
+      (key) => /^(sig|signature|token|expires|x-amz-signature|x-goog-signature)$/i.test(
+        key
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+function collectMediaUrls(value, found = [], contextKey = "") {
   if (typeof value === "string") {
-    if (/^https?:\/\//.test(value) && MEDIA_MIME_BY_EXTENSION[urlExtension(value)]) {
+    const extension = urlExtension(value);
+    const extensionless = extension === "";
+    if (value.startsWith("https://") && (MEDIA_MIME_BY_EXTENSION[extension] || extensionless && (isMediaHintKey(contextKey) || looksLikeSignedUrl(value)))) {
       found.push(value);
     }
   } else if (Array.isArray(value)) {
-    for (const item of value) collectMediaUrls(item, found);
+    for (const item of value) collectMediaUrls(item, found, contextKey);
   } else if (value && typeof value === "object") {
-    for (const item of Object.values(value)) collectMediaUrls(item, found);
+    for (const [key, item] of Object.entries(value)) {
+      collectMediaUrls(item, found, key);
+    }
   }
   return found;
 }
+async function responseBufferWithLimit(response, maxBytes) {
+  if (!response.body) return void 0;
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => void 0);
+      return void 0;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), total);
+}
+function resourceLink(url2, detectedMime) {
+  const extension = urlExtension(url2);
+  return {
+    type: "resource_link",
+    uri: url2,
+    name: decodeURIComponent(url2.split("/").pop() ?? url2).split("?")[0],
+    mimeType: detectedMime ?? MEDIA_MIME_BY_EXTENSION[extension]
+  };
+}
 async function mediaContentBlocks(output, embedImages) {
   const urls = [...new Set(collectMediaUrls(output))].slice(0, MAX_MEDIA_BLOCKS);
-  const blocks = [];
-  for (const url2 of urls) {
-    const extension = urlExtension(url2);
-    const imageMime = IMAGE_MIME_BY_EXTENSION[extension];
-    if (imageMime && embedImages) {
-      try {
-        const response = await fetch(url2, { signal: AbortSignal.timeout(15e3) });
-        const declaredLength = Number(response.headers.get("content-length"));
-        if (response.ok && (!Number.isFinite(declaredLength) || declaredLength <= MAX_EMBED_IMAGE_BYTES)) {
-          const buffer = Buffer.from(await response.arrayBuffer());
-          if (buffer.byteLength <= MAX_EMBED_IMAGE_BYTES) {
-            blocks.push({ type: "image", data: buffer.toString("base64"), mimeType: imageMime });
+  const results = new Array(urls.length);
+  let next = 0;
+  let embeddedBytes = 0;
+  const worker = async () => {
+    while (true) {
+      const index = next++;
+      if (index >= urls.length) return;
+      const url2 = urls[index];
+      const extension = urlExtension(url2);
+      const imageMime = IMAGE_MIME_BY_EXTENSION[extension];
+      if (embedImages && (imageMime || extension === "")) {
+        try {
+          const response = await safeMediaFetch(url2, {
+            signal: AbortSignal.timeout(15e3)
+          });
+          const responseMime = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+          const resolvedImageMime = responseMime.startsWith("image/") ? responseMime : imageMime;
+          if (!resolvedImageMime) {
+            await response.body?.cancel().catch(() => void 0);
+            results[index] = resourceLink(url2, responseMime || void 0);
             continue;
           }
+          const declaredLength = Number(response.headers.get("content-length"));
+          const remainingBudget = Math.max(
+            0,
+            MAX_EMBED_TOTAL_BYTES - embeddedBytes
+          );
+          const perImageBudget = Math.min(MAX_EMBED_IMAGE_BYTES, remainingBudget);
+          if (response.ok && perImageBudget > 0 && (!Number.isFinite(declaredLength) || declaredLength <= perImageBudget)) {
+            const buffer = await responseBufferWithLimit(response, perImageBudget);
+            if (buffer) {
+              embeddedBytes += buffer.byteLength;
+              results[index] = {
+                type: "image",
+                data: buffer.toString("base64"),
+                mimeType: resolvedImageMime
+              };
+              continue;
+            }
+          }
+        } catch {
         }
-      } catch {
+      }
+      results[index] = resourceLink(url2);
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(MEDIA_DOWNLOAD_CONCURRENCY, urls.length) },
+      worker
+    )
+  );
+  return results.filter(Boolean);
+}
+
+// src/core/polling.ts
+async function pollUntilDone(fetchCurrent, terminalStatuses, timeoutSeconds, pollIntervalSeconds, extra) {
+  const deadline = Date.now() + timeoutSeconds * 1e3;
+  let last;
+  while (Date.now() <= deadline) {
+    if (extra?.signal?.aborted) {
+      return { completed: false, cancelled: true, last };
+    }
+    last = await fetchCurrent();
+    const status = String(last.status ?? "").toLowerCase();
+    if (terminalStatuses.includes(status)) {
+      return { completed: true, last };
+    }
+    const progressToken = extra?._meta?.progressToken;
+    if (progressToken !== void 0 && extra?.sendNotification) {
+      const elapsedSeconds = Math.max(
+        0,
+        Math.round(timeoutSeconds - (deadline - Date.now()) / 1e3)
+      );
+      await extra.sendNotification({
+        method: "notifications/progress",
+        params: {
+          progressToken,
+          progress: elapsedSeconds,
+          total: timeoutSeconds,
+          message: status
+        }
+      }).catch(() => void 0);
+    }
+    try {
+      await abortableSleep(
+        Math.min(pollIntervalSeconds * 1e3, Math.max(0, deadline - Date.now())),
+        extra?.signal
+      );
+    } catch {
+      return { completed: false, cancelled: true, last };
+    }
+  }
+  return { completed: false, last };
+}
+
+// src/core/streaming.ts
+var CONNECTION_RETRY_STATUSES = /* @__PURE__ */ new Set([429, 502, 503, 504]);
+var SAFE_RAW_EVENT_TYPES = /* @__PURE__ */ new Set([
+  "status",
+  "tool_call",
+  "message",
+  "progress",
+  "web_search_query",
+  "web_search_citations",
+  "complete",
+  "execution_started",
+  "execution_progress",
+  "execution_completed"
+]);
+var MAX_STREAM_TEXT_CHARS = 1e6;
+var MAX_EVENTS_PER_BUCKET = 100;
+function sseDataFromBlock(block) {
+  return block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n").trim();
+}
+function normalizeSenseEvent(event, buckets) {
+  const record3 = event && typeof event === "object" ? event : { value: event };
+  const delta = record3?.choices?.[0]?.delta;
+  const extension = record3?.eachlabs ?? record3?.choices?.[0]?.delta?.eachlabs ?? record3;
+  const type = String(extension?.type ?? record3?.type ?? "");
+  const lowered = type.toLowerCase();
+  if (lowered.includes("thinking") || lowered.includes("reasoning")) {
+    return { type, suppressed: true };
+  }
+  const push = (target, value) => {
+    if (target.length < MAX_EVENTS_PER_BUCKET) target.push(value);
+  };
+  if (type === "generation_response") {
+    push(buckets.generations, extension);
+  } else if (type === "clarification_needed") {
+    push(buckets.clarification, extension);
+  } else if (type.startsWith("workflow_") || type.startsWith("execution_")) {
+    push(buckets.workflow, extension);
+  } else if (type === "error") {
+    push(buckets.errors, extension);
+  } else if (buckets.raw_safe_events && SAFE_RAW_EVENT_TYPES.has(type)) {
+    push(buckets.raw_safe_events, extension);
+  }
+  return {
+    type,
+    textDelta: typeof delta?.content === "string" ? delta.content : type === "text_response" && typeof extension?.content === "string" ? extension.content : void 0,
+    suppressed: false
+  };
+}
+async function responsePayload(response) {
+  const type = response.headers.get("content-type") ?? "";
+  return type.includes("application/json") ? response.json() : response.text();
+}
+async function streamEachSense(path2, {
+  baseUrl,
+  body,
+  timeoutSeconds = 900,
+  includeRawSafeEvents = false,
+  connectionRetries = 2,
+  apiKey
+}, extra) {
+  const url2 = new URL(joinUrl(baseUrl, path2));
+  const headers = new Headers({
+    Authorization: `Bearer ${apiKey ?? requireApiKey()}`,
+    "Content-Type": "application/json",
+    Accept: "text/event-stream, application/json"
+  });
+  let response;
+  let activityController;
+  let activityTimer;
+  let attempts = 0;
+  const armTimer = (milliseconds, message) => {
+    if (activityTimer) clearTimeout(activityTimer);
+    activityTimer = setTimeout(
+      () => activityController?.abort(new Error(message)),
+      milliseconds
+    );
+  };
+  while (!response) {
+    attempts++;
+    activityController = new AbortController();
+    armTimer(3e4, "Upstream streaming connection timed out.");
+    const signal = extra?.signal ? AbortSignal.any([extra.signal, activityController.signal]) : activityController.signal;
+    try {
+      response = await fetch(url2, {
+        method: "POST",
+        headers,
+        body,
+        signal
+      });
+    } catch (error2) {
+      if (activityTimer) clearTimeout(activityTimer);
+      throw new EachlabsError(
+        `Streaming request to ${url2.pathname} failed after dispatch. The result is unknown and the POST was not retried: ${error2 instanceof Error ? error2.message : String(error2)}`,
+        void 0,
+        void 0,
+        true,
+        { attempts, retryable: false }
+      );
+    }
+    if (!response.ok && CONNECTION_RETRY_STATUSES.has(response.status)) {
+      const retryable = attempts <= connectionRetries;
+      if (!retryable) break;
+      const retryAfter = response.headers.get("retry-after");
+      await response.body?.cancel().catch(() => void 0);
+      if (activityTimer) clearTimeout(activityTimer);
+      await abortableSleep(retryDelayMs(attempts, retryAfter), extra?.signal);
+      response = void 0;
+    }
+  }
+  if (activityTimer) clearTimeout(activityTimer);
+  if (!response) {
+    throw new EachlabsError("Streaming request did not return a response.");
+  }
+  const contentType2 = response.headers.get("content-type") ?? "";
+  if (!response.ok) {
+    const retryable = CONNECTION_RETRY_STATUSES.has(response.status);
+    throw new EachlabsError(
+      `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
+      response.status,
+      await responsePayload(response),
+      false,
+      responseMetadata(response, attempts, retryable)
+    );
+  }
+  if (!contentType2.includes("text/event-stream") || !response.body) {
+    return contentType2.includes("application/json") ? response.json() : response.text();
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const result = {
+    streamed: true,
+    generations: [],
+    clarification: [],
+    workflow: [],
+    errors: [],
+    raw_safe_events: includeRawSafeEvents ? [] : void 0,
+    event_count: 0,
+    connection_attempts: attempts
+  };
+  let buffer = "";
+  let textOut = "";
+  let textTruncated = false;
+  const combinedSignal2 = extra?.signal ? AbortSignal.any([extra.signal, activityController.signal]) : activityController.signal;
+  const resetIdleTimer = () => armTimer(
+    timeoutSeconds * 1e3,
+    `Upstream stream was idle for ${timeoutSeconds} seconds.`
+  );
+  resetIdleTimer();
+  const handleData = async (data) => {
+    if (!data || data === "[DONE]") return;
+    let event;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      return;
+    }
+    result.event_count++;
+    const normalized = normalizeSenseEvent(event, result);
+    if (normalized.suppressed) return;
+    if (normalized.textDelta) {
+      const remaining = MAX_STREAM_TEXT_CHARS - textOut.length;
+      if (remaining > 0) {
+        textOut += normalized.textDelta.slice(0, remaining);
+      }
+      if (normalized.textDelta.length > remaining) textTruncated = true;
+    }
+    const progressToken = extra?._meta?.progressToken;
+    if (progressToken !== void 0 && extra?.sendNotification && normalized.type !== "text_response") {
+      await extra.sendNotification({
+        method: "notifications/progress",
+        params: {
+          progressToken,
+          progress: result.event_count,
+          message: normalized.type || "streaming"
+        }
+      }).catch(() => void 0);
+    }
+  };
+  try {
+    while (true) {
+      if (combinedSignal2.aborted) {
+        await reader.cancel().catch(() => void 0);
+        result.cancelled = Boolean(extra?.signal?.aborted) || void 0;
+        break;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      resetIdleTimer();
+      buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+      let boundary;
+      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+        const data = sseDataFromBlock(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        await handleData(data);
       }
     }
-    blocks.push({
-      type: "resource_link",
-      uri: url2,
-      name: decodeURIComponent(url2.split("/").pop() ?? url2).split("?")[0],
-      mimeType: MEDIA_MIME_BY_EXTENSION[extension]
+  } catch (error2) {
+    if (!extra?.signal?.aborted) {
+      throw new EachlabsError(
+        `Streaming response from ${url2.pathname} failed after the stream started and was not retried: ${error2 instanceof Error ? error2.message : String(error2)}`,
+        void 0,
+        void 0,
+        true,
+        { attempts, retryable: false }
+      );
+    }
+  } finally {
+    if (activityTimer) clearTimeout(activityTimer);
+  }
+  buffer += decoder.decode();
+  await handleData(sseDataFromBlock(buffer));
+  result.text = textOut || void 0;
+  result.text_truncated = textTruncated || void 0;
+  if (!includeRawSafeEvents) delete result.raw_safe_events;
+  return result;
+}
+
+// src/core/workflow-validator.ts
+var STEP_TYPES = /* @__PURE__ */ new Set([
+  "model",
+  "http",
+  "python",
+  "parallel",
+  "choice",
+  "pass"
+]);
+var CHOICE_OPERATORS = /* @__PURE__ */ new Set([
+  "equals",
+  "not_equals",
+  "greater_than",
+  "greater_than_or_equal",
+  "less_than",
+  "less_than_or_equal",
+  "string_contains",
+  "string_starts_with",
+  "string_ends_with",
+  "string_matches",
+  "array_contains",
+  "array_length_equals",
+  "is_null",
+  "is_not_null",
+  "in",
+  "not_in"
+]);
+var TEMPLATE_REFERENCE = /\{\{\s*([a-zA-Z0-9_-]+)(?:\.([^}]+))?\s*\}\}/g;
+var CONDITION_REFERENCE = /^\$\.([a-zA-Z0-9_-]+)(?:\.|$)/;
+var SECRET_FIELD = /(api[_-]?key|secret|token|password|authorization)/i;
+function objectRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function stepId(step) {
+  return String(step.step_id ?? step.id ?? "");
+}
+function collectTemplateReferences(value, output = []) {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(TEMPLATE_REFERENCE)) {
+      output.push({ root: match[1], tail: match[2]?.trim() });
+    }
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectTemplateReferences(item, output);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      collectTemplateReferences(item, output);
+    }
+  }
+  return output;
+}
+function nestedStepArrays(step) {
+  const result = [];
+  const add = (candidate, path2) => {
+    if (Array.isArray(candidate)) result.push({ steps: candidate, path: path2 });
+    else if (Array.isArray(objectRecord(candidate)?.steps)) {
+      result.push({ steps: objectRecord(candidate).steps, path: `${path2}.steps` });
+    }
+  };
+  if (Array.isArray(step.branches)) {
+    step.branches.forEach(
+      (branch, index) => add(branch, `.branches[${index}]`)
+    );
+  }
+  add(step.condition_met_branch, ".condition_met_branch");
+  add(step.default_branch, ".default_branch");
+  if (Array.isArray(step.choices)) {
+    step.choices.forEach(
+      (choice, index) => add(choice, `.choices[${index}]`)
+    );
+  }
+  return result;
+}
+function inspectCondition(condition, available, inputFields, path2, diagnostics) {
+  const record3 = objectRecord(condition);
+  if (!record3) {
+    diagnostics.push({
+      severity: "error",
+      code: "choice_condition_missing",
+      path: path2,
+      message: "Choice steps require a condition object."
+    });
+    return;
+  }
+  for (const logical of ["and", "or"]) {
+    if (Array.isArray(record3[logical])) {
+      record3[logical].forEach(
+        (item, index) => inspectCondition(item, available, inputFields, `${path2}.${logical}[${index}]`, diagnostics)
+      );
+      return;
+    }
+  }
+  if (record3.not) {
+    inspectCondition(record3.not, available, inputFields, `${path2}.not`, diagnostics);
+    return;
+  }
+  if (!CHOICE_OPERATORS.has(String(record3.operator ?? ""))) {
+    diagnostics.push({
+      severity: "warning",
+      code: "choice_operator_unknown",
+      path: `${path2}.operator`,
+      message: `Operator '${String(record3.operator ?? "")}' is not in the documented operator set.`
     });
   }
-  return blocks;
+  const match = String(record3.expression ?? "").match(CONDITION_REFERENCE);
+  if (!match) {
+    diagnostics.push({
+      severity: "error",
+      code: "choice_expression_invalid",
+      path: `${path2}.expression`,
+      message: "Choice expressions must use $.inputs.field or $.step_id.field syntax."
+    });
+  } else if (match[1] === "inputs") {
+    const field = String(record3.expression ?? "").split(".")[2];
+    if (inputFields.size > 0 && field && !inputFields.has(field)) {
+      diagnostics.push({
+        severity: "error",
+        code: "input_reference_unknown",
+        path: `${path2}.expression`,
+        message: `Choice expression references undefined workflow input '${field}'.`
+      });
+    }
+  } else if (!available.has(match[1])) {
+    diagnostics.push({
+      severity: "error",
+      code: "reference_unavailable",
+      path: `${path2}.expression`,
+      message: `Choice expression references unavailable step '${match[1]}'.`
+    });
+  }
+}
+function inspectPolicy(value, path2, diagnostics) {
+  if (Array.isArray(value)) {
+    value.forEach(
+      (item, index) => inspectPolicy(item, `${path2}[${index}]`, diagnostics)
+    );
+    return;
+  }
+  const record3 = objectRecord(value);
+  if (!record3) return;
+  for (const [key, item] of Object.entries(record3)) {
+    const itemPath = `${path2}.${key}`;
+    if (SECRET_FIELD.test(key) && typeof item === "string" && item.length > 0) {
+      diagnostics.push({
+        severity: "warning",
+        code: "inline_secret",
+        path: itemPath,
+        message: "Possible inline secret; use runtime configuration instead."
+      });
+    }
+    if ((key === "url" || key === "endpoint") && typeof item === "string" && item.startsWith("http://")) {
+      diagnostics.push({
+        severity: "warning",
+        code: "insecure_http",
+        path: itemPath,
+        message: "Plain HTTP endpoint detected; prefer HTTPS."
+      });
+    }
+    inspectPolicy(item, itemPath, diagnostics);
+  }
+}
+async function validateWorkflowDefinition(definition, {
+  expectedVersion,
+  modelResolver,
+  policyChecks = false
+} = {}) {
+  const diagnostics = [];
+  const workflow = objectRecord(definition);
+  if (!workflow) {
+    return {
+      valid: false,
+      diagnostics: [
+        {
+          severity: "error",
+          code: "definition_invalid",
+          path: "$",
+          message: "Workflow definition must be a JSON object."
+        }
+      ],
+      stats: { steps: 0, models: 0 }
+    };
+  }
+  if (expectedVersion && workflow.version !== void 0 && String(workflow.version) !== expectedVersion) {
+    diagnostics.push({
+      severity: "error",
+      code: "version_mismatch",
+      path: "$.version",
+      message: `Definition version '${String(workflow.version)}' must match '${expectedVersion}'.`
+    });
+  }
+  if (workflow.input_schema !== void 0) {
+    const schemaCheck = checkJsonSchema(workflow.input_schema);
+    if (!schemaCheck.valid) {
+      diagnostics.push({
+        severity: "error",
+        code: "input_schema_invalid",
+        path: "$.input_schema",
+        message: schemaCheck.error ?? "Invalid JSON Schema."
+      });
+    }
+  }
+  const rootSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
+  const inputFields = new Set(
+    Object.keys(objectRecord(objectRecord(workflow.input_schema)?.properties) ?? {})
+  );
+  if (!Array.isArray(workflow.steps)) {
+    diagnostics.push({
+      severity: "error",
+      code: "steps_missing",
+      path: "$.steps",
+      message: "Workflow definition requires a steps array."
+    });
+  }
+  const allIds = /* @__PURE__ */ new Set();
+  const modelSteps = [];
+  let stepCount = 0;
+  const walk = (rawSteps, inherited, basePath) => {
+    const available = new Set(inherited);
+    rawSteps.forEach((rawStep, index) => {
+      const path2 = `${basePath}[${index}]`;
+      const step = objectRecord(rawStep);
+      if (!step) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_invalid",
+          path: path2,
+          message: "Step must be a JSON object."
+        });
+        return;
+      }
+      stepCount++;
+      const id = stepId(step);
+      if (!id) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_id_missing",
+          path: path2,
+          message: "Step requires id or step_id."
+        });
+      } else if (allIds.has(id)) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_id_duplicate",
+          path: path2,
+          message: `Step ID '${id}' is duplicated.`
+        });
+      } else {
+        allIds.add(id);
+      }
+      const type = String(step.type ?? "");
+      if (!STEP_TYPES.has(type)) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_type_unsupported",
+          path: `${path2}.type`,
+          message: `Unsupported step type '${type}'.`
+        });
+      }
+      const directStep = { ...step };
+      delete directStep.branches;
+      delete directStep.condition_met_branch;
+      delete directStep.default_branch;
+      delete directStep.choices;
+      for (const reference of collectTemplateReferences(directStep)) {
+        if (reference.root === "inputs") {
+          const field = reference.tail?.split(".")[0];
+          if (inputFields.size > 0 && field && !inputFields.has(field)) {
+            diagnostics.push({
+              severity: "error",
+              code: "input_reference_unknown",
+              path: path2,
+              message: `Template references undefined workflow input '${field}'.`
+            });
+          }
+        } else if (!available.has(reference.root)) {
+          diagnostics.push({
+            severity: "error",
+            code: "reference_unavailable",
+            path: path2,
+            message: `Template references unavailable or later step '${reference.root}'.`
+          });
+        }
+      }
+      if (type === "choice") {
+        inspectCondition(
+          step.condition,
+          available,
+          inputFields,
+          `${path2}.condition`,
+          diagnostics
+        );
+        for (const branchName of [
+          "condition_met_branch",
+          "default_branch"
+        ]) {
+          const branch = objectRecord(step[branchName]);
+          if (!branch || !Array.isArray(branch.steps)) {
+            diagnostics.push({
+              severity: "error",
+              code: "choice_branch_invalid",
+              path: `${path2}.${branchName}`,
+              message: `${branchName} must be an object containing a steps array.`
+            });
+          }
+        }
+      }
+      if (type === "parallel") {
+        if (!Array.isArray(step.branches) || step.branches.length < 1 || step.branches.length > 40) {
+          diagnostics.push({
+            severity: "error",
+            code: "parallel_branches_invalid",
+            path: `${path2}.branches`,
+            message: "Parallel steps require between 1 and 40 branches."
+          });
+        } else {
+          step.branches.forEach((branch, branchIndex) => {
+            if (!Array.isArray(objectRecord(branch)?.steps)) {
+              diagnostics.push({
+                severity: "error",
+                code: "parallel_branch_invalid",
+                path: `${path2}.branches[${branchIndex}]`,
+                message: "Each parallel branch must contain a steps array."
+              });
+            }
+          });
+        }
+      }
+      if (type === "model") {
+        const model = String(step.model ?? "");
+        if (!model) {
+          diagnostics.push({
+            severity: "error",
+            code: "model_missing",
+            path: `${path2}.model`,
+            message: "Model step requires a model slug."
+          });
+        } else {
+          modelSteps.push({
+            model,
+            params: objectRecord(step.params) ?? {},
+            path: path2
+          });
+        }
+        const fallback = objectRecord(step.fallback);
+        const fallbackModel = String(fallback?.model ?? "");
+        if (fallback?.enabled && fallbackModel) {
+          modelSteps.push({
+            model: fallbackModel,
+            params: objectRecord(fallback.params) ?? {},
+            path: `${path2}.fallback`
+          });
+        }
+      }
+      const retry = objectRecord(step.retry);
+      if (retry?.max_attempts !== void 0) {
+        const attempts = Number(retry.max_attempts);
+        if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) {
+          diagnostics.push({
+            severity: "error",
+            code: "retry_bounds",
+            path: `${path2}.retry.max_attempts`,
+            message: "max_attempts must be an integer from 1 to 10."
+          });
+        }
+      }
+      const timeout = step.timeout_seconds ?? step.timeout;
+      if (timeout !== void 0 && (Number(timeout) < 1 || Number(timeout) > 900)) {
+        diagnostics.push({
+          severity: "error",
+          code: "timeout_bounds",
+          path: `${path2}.timeout_seconds`,
+          message: "Step timeout must be between 1 and 900 seconds."
+        });
+      }
+      for (const nested of nestedStepArrays(step)) {
+        const nestedAvailable = walk(
+          nested.steps,
+          available,
+          `${path2}${nested.path}`
+        );
+        if (type === "parallel") {
+          for (const nestedId of nestedAvailable) available.add(nestedId);
+        }
+      }
+      if (id) available.add(id);
+    });
+    return available;
+  };
+  walk(rootSteps, /* @__PURE__ */ new Set(), "$.steps");
+  if (modelResolver) {
+    const cache = /* @__PURE__ */ new Map();
+    const resolve = (slug) => {
+      const existing = cache.get(slug);
+      if (existing) return existing;
+      const request = modelResolver(slug);
+      cache.set(slug, request);
+      return request;
+    };
+    await Promise.all(
+      modelSteps.map(async ({ model, params, path: path2 }) => {
+        try {
+          const details = await resolve(model);
+          const schema = getRequestSchema(details);
+          if (!schema) {
+            diagnostics.push({
+              severity: "warning",
+              code: "model_schema_missing",
+              path: `${path2}.model`,
+              message: `Model '${model}' exists but has no documented request schema.`
+            });
+            return;
+          }
+          const validation = validateAgainstSchema(schema, params);
+          for (const error2 of validation.errors) {
+            diagnostics.push({
+              severity: "error",
+              code: "model_params_invalid",
+              path: `${path2}.params.${error2.field}`,
+              message: error2.message
+            });
+          }
+          for (const warning of validation.warnings) {
+            diagnostics.push({
+              severity: "warning",
+              code: "model_params_unknown",
+              path: `${path2}.params.${warning.field}`,
+              message: warning.message
+            });
+          }
+        } catch (error2) {
+          diagnostics.push({
+            severity: "error",
+            code: "model_not_found",
+            path: `${path2}.model`,
+            message: `Could not resolve model '${model}': ${error2 instanceof Error ? error2.message : String(error2)}`
+          });
+        }
+      })
+    );
+  }
+  if (policyChecks) inspectPolicy(workflow, "$", diagnostics);
+  return {
+    valid: !diagnostics.some((item) => item.severity === "error"),
+    diagnostics,
+    stats: {
+      steps: stepCount,
+      models: new Set(modelSteps.map((item) => item.model)).size,
+      errors: diagnostics.filter((item) => item.severity === "error").length,
+      warnings: diagnostics.filter((item) => item.severity === "warning").length
+    }
+  };
+}
+
+// src/index.ts
+var jsonObjectSchema = external_exports.record(external_exports.unknown());
+var chatMessageSchema = external_exports.object({
+  role: external_exports.string().describe("Message role, usually system, user, assistant, or tool."),
+  content: external_exports.unknown().describe("Message content. Strings and structured multimodal content are supported.")
+});
+function compact(value) {
+  return JSON.stringify(value, null, 2);
+}
+function text(value) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: typeof value === "string" ? value : compact(value)
+      }
+    ]
+  };
+}
+function errorText(value) {
+  return { ...text(value), isError: true };
+}
+function passthroughMcpResult(value) {
+  if (value && typeof value === "object" && "content" in value && Array.isArray(value.content)) {
+    return value;
+  }
+  return text(value);
+}
+function normalizePath(path2) {
+  return path2.startsWith("/") ? path2 : `/${path2}`;
+}
+function workflowTriggerPath(workflowId, versionId, bulk = false) {
+  return `/v1/workflows/${bulk ? "bulk-trigger" : "trigger"}/${encodeURIComponent(workflowId)}/${encodeURIComponent(versionId)}`;
+}
+function workflowExecutionPath(executionId) {
+  return `/v1/workflows/executions/${encodeURIComponent(executionId)}`;
+}
+async function resolveWorkflowVersionId(workflowId, requested, signal) {
+  if (requested) return requested;
+  const workflow = await eachRequest(
+    `/workflows/${encodeURIComponent(workflowId)}`,
+    { baseUrl: EACH_WORKFLOWS_BASE_URL, signal }
+  );
+  const latest = workflow.latest_version_id ?? workflow.latest_version?.id ?? workflow.latestVersion?.id;
+  if (latest) return String(latest);
+  const versions = Array.isArray(workflow.versions) ? workflow.versions : [];
+  const fallback = versions.find((version2) => version2.latest === true) ?? versions.at(-1);
+  const id = fallback?.id ?? fallback?.version_id;
+  if (!id) {
+    throw new EachlabsError(
+      "version_id was omitted and the workflow response did not expose a latest version ID."
+    );
+  }
+  return String(id);
+}
+function flagPath(path2, flagKey) {
+  const normalized = normalizePath(path2);
+  if (!flagKey) {
+    if (normalized.includes("{flag_key}") || normalized.includes(":flag_key")) {
+      throw new EachlabsError("flag_key is required when the flags path contains a flag key placeholder.");
+    }
+    return normalized;
+  }
+  const encoded = encodeURIComponent(flagKey);
+  if (normalized.includes("{flag_key}")) return normalized.replaceAll("{flag_key}", encoded);
+  if (normalized.includes(":flag_key")) return normalized.replaceAll(":flag_key", encoded);
+  return `${normalized.replace(/\/+$/, "")}/${encoded}`;
+}
+function flagActionPath(path2, flagKey) {
+  return path2.includes("{flag_key}") || path2.includes(":flag_key") ? flagPath(path2, flagKey) : normalizePath(path2);
+}
+function buildFlagEvaluationBody({
+  flag_key,
+  context,
+  default_value,
+  extra,
+  body
+}) {
+  if (body) return body;
+  const payload = {
+    ...extra ?? {}
+  };
+  if (flag_key) payload.flag_key = flag_key;
+  if (context && Object.keys(context).length > 0) payload.context = context;
+  if (default_value !== void 0) payload.default_value = default_value;
+  return payload;
+}
+var modelCache;
+var modelFetchPromise;
+async function getAllModels(maxModels) {
+  const cached2 = modelCache;
+  if (cached2 && Date.now() - cached2.fetchedAt < MODEL_CACHE_TTL_MS && (cached2.complete || cached2.models.length >= maxModels)) {
+    return cached2.models.slice(0, maxModels);
+  }
+  modelFetchPromise ??= (async () => {
+    const pageSize = 100;
+    const models = [];
+    let complete = false;
+    for (let offset = 0; models.length < maxModels; offset += pageSize) {
+      const page = await eachRequest(
+        appendQuery("/v1/models", { limit: pageSize, offset }),
+        { auth: false }
+      );
+      const pageItems = Array.isArray(page) ? page : page && typeof page === "object" && Array.isArray(page.items) ? page.items : [];
+      if (pageItems.length === 0) {
+        complete = true;
+        break;
+      }
+      models.push(...pageItems);
+      if (pageItems.length < pageSize) {
+        complete = true;
+        break;
+      }
+    }
+    return { models, complete };
+  })();
+  let result;
+  try {
+    result = await modelFetchPromise;
+  } finally {
+    modelFetchPromise = void 0;
+  }
+  modelCache = { ...result, fetchedAt: Date.now() };
+  if (!result.complete && result.models.length < maxModels) {
+    return getAllModels(maxModels);
+  }
+  return result.models.slice(0, maxModels);
+}
+function trimModel(model) {
+  return modelDeveloperSummary(model);
+}
+function scoreModel(model, terms, requiredFields2, outputType) {
+  const title = String(model.title ?? "").toLowerCase();
+  const slug = String(model.slug ?? "").toLowerCase();
+  const provider = String(model.provider_name ?? model.provider ?? "").toLowerCase();
+  const description = String(model.description ?? "").toLowerCase();
+  const category = model.category && typeof model.category === "object" ? String(
+    model.category.slug ?? model.category.Slug ?? model.category.name ?? model.category.Name ?? ""
+  ).toLowerCase() : String(model.category ?? "").toLowerCase();
+  const haystack = `${title} ${slug} ${provider} ${category} ${description}`;
+  const schema = getRequestSchema(model);
+  const fields = new Set(Object.keys(schemaProperties(schema)));
+  let score = 0;
+  for (const term of terms) {
+    if (!term) continue;
+    if (haystack.includes(term)) score += 4;
+    for (const field of fields) {
+      if (field.toLowerCase().includes(term)) score += 1;
+    }
+  }
+  for (const field of requiredFields2) {
+    if (fields.has(field)) score += 6;
+  }
+  if (outputType && String(model.output_type ?? "").toLowerCase().includes(outputType.toLowerCase())) {
+    score += 5;
+  }
+  return score;
+}
+async function getModelBySlug(slug) {
+  return eachRequest(
+    appendQuery("/v1/model", { slug }),
+    { auth: false }
+  );
 }
 async function predictionToolResult(value, prediction, includeMedia, embedImages) {
   const base = text(value);
@@ -23738,114 +25933,6 @@ async function predictionToolResult(value, prediction, includeMedia, embedImages
   if (status !== "success") return base;
   const media = await mediaContentBlocks(prediction.output, embedImages);
   return media.length > 0 ? { content: [...base.content, ...media] } : base;
-}
-async function pollUntilDone(fetchCurrent, terminalStatuses, timeoutSeconds, pollIntervalSeconds, extra) {
-  const deadline = Date.now() + timeoutSeconds * 1e3;
-  let last;
-  while (Date.now() <= deadline) {
-    if (extra?.signal?.aborted) break;
-    last = await fetchCurrent();
-    const status = String(last.status ?? "").toLowerCase();
-    if (terminalStatuses.includes(status)) {
-      return { completed: true, last };
-    }
-    const progressToken = extra?._meta?.progressToken;
-    if (progressToken !== void 0 && extra?.sendNotification) {
-      const elapsedSeconds = Math.round(timeoutSeconds - (deadline - Date.now()) / 1e3);
-      await extra.sendNotification({
-        method: "notifications/progress",
-        params: { progressToken, progress: elapsedSeconds, total: timeoutSeconds, message: status }
-      }).catch(() => void 0);
-    }
-    await sleep(pollIntervalSeconds * 1e3);
-  }
-  return { completed: false, last };
-}
-async function eachRequestStreaming(path, options, extra) {
-  const url2 = new URL(joinUrl(options.baseUrl, path));
-  const headers = new Headers({
-    "X-API-Key": requireApiKey(),
-    "Content-Type": "application/json",
-    Accept: "text/event-stream, application/json"
-  });
-  const response = await fetch(url2, {
-    method: "POST",
-    headers,
-    body: options.body,
-    signal: AbortSignal.timeout(options.timeoutMs ?? 3e5)
-  });
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!response.ok) {
-    const payload = contentType.includes("application/json") ? await response.json() : await response.text();
-    throw new EachlabsError(
-      `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
-      response.status,
-      payload
-    );
-  }
-  if (!contentType.includes("text/event-stream") || !response.body) {
-    return contentType.includes("application/json") ? response.json() : response.text();
-  }
-  const progressToken = extra?._meta?.progressToken;
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let textOut = "";
-  let eventCount = 0;
-  const events = [];
-  const handleData = async (data) => {
-    if (data === "[DONE]") return;
-    let event;
-    try {
-      event = JSON.parse(data);
-    } catch {
-      events.push(data);
-      return;
-    }
-    eventCount++;
-    const record2 = event;
-    const delta = record2?.choices?.[0]?.delta;
-    if (typeof delta?.content === "string") textOut += delta.content;
-    const extension = record2?.eachlabs ?? record2?.choices?.[0]?.delta?.eachlabs;
-    const extensionType = String(extension?.type ?? record2?.type ?? "");
-    const isDeltaChunk = typeof delta?.content === "string" || extensionType.includes("delta");
-    if (!isDeltaChunk && events.length < 100) {
-      events.push(extension ?? event);
-    }
-    if (progressToken !== void 0 && extra?.sendNotification && !isDeltaChunk) {
-      await extra.sendNotification({
-        method: "notifications/progress",
-        params: {
-          progressToken,
-          progress: eventCount,
-          message: extensionType || "streaming"
-        }
-      }).catch(() => void 0);
-    }
-  };
-  while (true) {
-    if (extra?.signal?.aborted) {
-      await reader.cancel().catch(() => void 0);
-      break;
-    }
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let newline;
-    while ((newline = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, newline).trim();
-      buffer = buffer.slice(newline + 1);
-      if (line.startsWith("data:")) {
-        await handleData(line.slice(5).trim());
-      }
-    }
-  }
-  return {
-    streamed: true,
-    text: textOut || void 0,
-    events,
-    event_count: eventCount
-  };
 }
 var server = new McpServer(
   {
@@ -23857,6 +25944,9 @@ var server = new McpServer(
       "Unofficial MCP server for the each::labs platform (models, predictions, workflows, each::sense, LLM router).",
       "Typical model-run flow: eachlabs_search_models -> eachlabs_get_model_request_schema -> eachlabs_create_prediction (mode 'wait' for short jobs, 'async' + eachlabs_get_prediction for long ones).",
       "Media inputs must be URLs; upload local files first with eachlabs_upload_file.",
+      "Dedicated audio APIs are available through eachlabs_audio_transcribe and eachlabs_audio_speech.",
+      "Developer helpers can diff live model schemas and workflow definitions, generate Go/TypeScript/Python/cURL integrations, and export privacy-safe debug bundles.",
+      "Undocumented each::flags tools are experimental and only registered when EACHLABS_ENABLE_EXPERIMENTAL_FLAGS=1.",
       "Requires EACH_API_KEY (or EACHLABS_API_KEY) in the environment for everything except the public model catalog and docs search."
     ].join("\n")
   }
@@ -23881,7 +25971,9 @@ function registerTool(name, config2, inputSchema, handler) {
           return errorText({
             error: error2.message,
             status: error2.status ?? null,
-            upstream: error2.payload ?? null
+            upstream: error2.payload ?? null,
+            ambiguous_write: error2.ambiguousWrite || void 0,
+            request: error2.requestMetadata
           });
         }
         return errorText({
@@ -23914,6 +26006,21 @@ registerTool(
     command: external_exports.string().min(1).describe("Read-only shell command for the virtual docs filesystem, e.g. `tree / -L 2` or `head -80 /quickstart.mdx`.")
   },
   async ({ command }) => passthroughMcpResult(await callOfficialDocsTool("query_docs_filesystem_each_labs", { command }))
+);
+registerTool(
+  "eachlabs_submit_docs_feedback",
+  {
+    title: "Submit each::labs docs feedback",
+    description: "Submit focused feedback about an official each::labs documentation page through the official docs MCP.",
+    annotations: { ...write, idempotentHint: false }
+  },
+  {
+    path: external_exports.string().min(1).describe("Documentation path the feedback applies to."),
+    feedback: external_exports.string().min(1).describe("Specific correction or improvement request.")
+  },
+  async ({ path: path2, feedback }) => passthroughMcpResult(
+    await callOfficialDocsTool("submit_feedback", { path: path2, feedback })
+  )
 );
 registerTool(
   "eachlabs_search_models",
@@ -23970,7 +26077,10 @@ registerTool(
     if (openapi) {
       return text({
         slug,
-        openapi_schema: await eachRequest(`/v1/models/${slug}/schemas/openapi`)
+        openapi_schema: await eachRequest(
+          `/v1/models/${encodeURIComponent(slug)}/schemas/openapi`,
+          { auth: false }
+        )
       });
     }
     const model = await getModelBySlug(slug);
@@ -24049,8 +26159,14 @@ registerTool(
       const fields = new Set(Object.keys(schemaProperties(schema)));
       const title = String(model.title ?? "").toLowerCase();
       const slug = String(model.slug ?? "").toLowerCase();
-      const provider = String(model.provider ?? "").toLowerCase();
-      if (queryLower && !`${title} ${slug} ${provider}`.includes(queryLower)) return false;
+      const provider = String(model.provider_name ?? model.provider ?? "").toLowerCase();
+      const description = String(model.description ?? "").toLowerCase();
+      const category = model.category && typeof model.category === "object" ? JSON.stringify(model.category).toLowerCase() : String(model.category ?? "").toLowerCase();
+      if (queryLower && !`${title} ${slug} ${provider} ${description} ${category}`.includes(
+        queryLower
+      )) {
+        return false;
+      }
       if (output_type && !String(model.output_type ?? "").toLowerCase().includes(output_type.toLowerCase())) {
         return false;
       }
@@ -24091,6 +26207,140 @@ registerTool(
   }
 );
 registerTool(
+  "eachlabs_compare_models",
+  {
+    title: "Compare models without running them",
+    description: "Compare 2-10 live catalog models by provider, category, p50 latency, required inputs, field constraints, and capability fit. Read-only and does not spend credits.",
+    annotations: { ...readOnly }
+  },
+  {
+    models: external_exports.array(external_exports.string().min(1)).min(2).max(10).describe("Model slugs to compare."),
+    required_fields: external_exports.array(external_exports.string()).default([]).describe("Input fields every suitable model must support."),
+    focus_fields: external_exports.array(external_exports.string()).default([]).describe("Extra fields to include in the compact constraint matrix.")
+  },
+  async ({ models, required_fields, focus_fields }) => {
+    const uniqueModels = [...new Set(models)];
+    const settled = await Promise.allSettled(
+      uniqueModels.map((slug) => getModelBySlug(slug))
+    );
+    const loaded = [];
+    const errors = [];
+    for (const [index, result] of settled.entries()) {
+      if (result.status === "fulfilled") {
+        loaded.push(result.value);
+      } else {
+        errors.push({
+          slug: uniqueModels[index],
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason)
+        });
+      }
+    }
+    if (loaded.length < 2) {
+      return errorText({
+        compared: false,
+        error: "At least two model records must be loaded for comparison.",
+        model_errors: errors
+      });
+    }
+    return text({
+      ...compareModelRecords(loaded, required_fields, focus_fields),
+      model_errors: errors
+    });
+  }
+);
+registerTool(
+  "eachlabs_diff_model_schema",
+  {
+    title: "Diff a live model schema",
+    description: "Compare a saved baseline request schema with the model's current live schema. Classifies removed fields, new required fields, narrowed enums, type changes, and tighter constraints as potentially breaking. Does not run a prediction.",
+    annotations: { ...readOnly }
+  },
+  {
+    model: external_exports.string().min(1).describe("Live EachLabs model slug."),
+    baseline_schema: jsonObjectSchema.describe(
+      "Previously saved request_schema to compare against the current live schema."
+    )
+  },
+  async ({ model, baseline_schema }) => {
+    const details = await getModelBySlug(model);
+    const current = getRequestSchema(details);
+    if (!current || typeof current !== "object") {
+      return errorText({
+        compared: false,
+        error: `Model '${model}' has no live request schema.`
+      });
+    }
+    return text({
+      model,
+      ...diffModelSchemas(baseline_schema, current),
+      current_schema: current
+    });
+  }
+);
+registerTool(
+  "eachlabs_diff_workflow",
+  {
+    title: "Diff workflow definitions",
+    description: "Compare two workflow definitions locally before publishing a version. Highlights added/removed steps, model/type changes, parameter changes, and input-schema compatibility. Does not mutate or execute a workflow.",
+    annotations: { ...readOnly }
+  },
+  {
+    before_definition: jsonObjectSchema,
+    after_definition: jsonObjectSchema
+  },
+  async ({ before_definition, after_definition }) => text(diffWorkflowDefinitions(before_definition, after_definition))
+);
+registerTool(
+  "eachlabs_generate_integration_code",
+  {
+    title: "Generate model integration code",
+    description: "Generate deterministic TypeScript, Python, Go, or cURL integration code from the model's current live request schema. Static model/version tables are never used.",
+    annotations: { ...readOnly }
+  },
+  {
+    model: external_exports.string().min(1).describe("Live EachLabs model slug."),
+    language: external_exports.enum(["typescript", "python", "go", "curl"]),
+    mode: external_exports.enum(["async_polling", "webhook", "synchronous"]).default("async_polling"),
+    framework: external_exports.enum(["none", "express", "nextjs", "fastapi", "flask"]).default("none").describe("Optional webhook-handler framework."),
+    include_types: external_exports.boolean().default(true),
+    include_zod: external_exports.boolean().default(false).describe("TypeScript only. Generate a Zod input validator.")
+  },
+  async ({ model, language, mode, framework, include_types, include_zod }) => {
+    const validFramework = framework === "none" || language === "typescript" && ["express", "nextjs"].includes(framework) || language === "python" && ["fastapi", "flask"].includes(framework);
+    if (!validFramework) {
+      return errorText({
+        generated: false,
+        error: `Framework '${framework}' is not compatible with language '${language}'.`
+      });
+    }
+    if (framework !== "none" && mode !== "webhook") {
+      return errorText({
+        generated: false,
+        error: "A framework handler is only generated in webhook mode."
+      });
+    }
+    const details = await getModelBySlug(model);
+    const schema = getRequestSchema(details);
+    if (!schema || typeof schema !== "object") {
+      return errorText({
+        generated: false,
+        error: `Model '${model}' has no live request schema.`
+      });
+    }
+    return text(
+      generateIntegrationCode({
+        model,
+        schema,
+        language,
+        mode,
+        framework,
+        includeTypes: include_types,
+        includeZod: include_zod
+      })
+    );
+  }
+);
+registerTool(
   "eachlabs_create_prediction",
   {
     title: "Create prediction",
@@ -24105,7 +26355,9 @@ registerTool(
     mode: external_exports.enum(["async", "wait", "sync"]).default("async"),
     validate_input: external_exports.boolean().default(true).describe("Validate input against the model request_schema before creating. Skipped if no schema is documented."),
     webhook_url: external_exports.string().url().optional(),
-    webhook_secret: external_exports.string().optional().describe("HMAC-SHA256 secret used to sign webhook deliveries."),
+    webhook_secret: external_exports.string().optional().describe(
+      "Shared secret delivered verbatim in X-Webhook-Secret. Verify it with a constant-time string comparison; it is not an HMAC body signature."
+    ),
     timeout_seconds: external_exports.number().int().min(1).max(1800).default(300).describe("Only used for mode 'wait' and 'sync'."),
     poll_interval_seconds: external_exports.number().min(0.5).max(30).default(3).describe("Only used for mode 'wait'."),
     include_media: external_exports.boolean().default(true).describe("Attach successful outputs as media content blocks (inline images, links for video/audio)."),
@@ -24155,14 +26407,14 @@ registerTool(
     if (!predictionId) {
       return text({ created, warning: "Prediction response did not include a prediction ID; cannot wait." });
     }
-    const { completed, last } = await pollUntilDone(
-      () => eachRequest(`/v1/prediction/${predictionId}`),
+    const { completed, cancelled, last } = await pollUntilDone(
+      () => eachRequest(`/v1/prediction/${predictionId}`, { signal: extra?.signal }),
       PREDICTION_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra
     );
-    if (!completed) return text({ created, status: "timeout", last });
+    if (!completed) return text({ created, status: cancelled ? "cancelled_by_client" : "timeout", last });
     return predictionToolResult({ created, final: last }, last, include_media, embed_images);
   }
 );
@@ -24183,17 +26435,19 @@ registerTool(
   },
   async ({ prediction_id, wait, timeout_seconds, poll_interval_seconds, include_media, embed_images }, extra) => {
     if (!wait) {
-      const prediction = await eachRequest(`/v1/prediction/${prediction_id}`);
+      const prediction = await eachRequest(`/v1/prediction/${prediction_id}`, {
+        signal: extra?.signal
+      });
       return predictionToolResult(prediction, prediction, include_media, embed_images);
     }
-    const { completed, last } = await pollUntilDone(
-      () => eachRequest(`/v1/prediction/${prediction_id}`),
+    const { completed, cancelled, last } = await pollUntilDone(
+      () => eachRequest(`/v1/prediction/${prediction_id}`, { signal: extra?.signal }),
       PREDICTION_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra
     );
-    if (!completed) return text({ status: "timeout", prediction_id, last });
+    if (!completed) return text({ status: cancelled ? "cancelled_by_client" : "timeout", prediction_id, last });
     return predictionToolResult(last, last, include_media, embed_images);
   }
 );
@@ -24220,17 +26474,221 @@ registerTool(
     limit: external_exports.number().int().min(1).max(100).default(20),
     offset: external_exports.number().int().min(0).default(0),
     model: external_exports.string().optional().describe("Filter by model slug."),
-    status: external_exports.string().optional().describe("Comma-separated statuses, e.g. success,failed."),
+    status: external_exports.string().optional().describe("Comma-separated statuses: created, starting, success, error."),
+    error_classification: external_exports.array(
+      external_exports.enum([
+        "content_moderation",
+        "execution_timeout",
+        "invalid_user_input",
+        "invalid_model_config",
+        "provider_auth",
+        "provider_error",
+        "provider_rate_limit",
+        "provider_unavailable",
+        "internal_error",
+        "unknown"
+      ])
+    ).optional().describe("Filter failed executions by one or more canonical error classifications."),
     workflow_id: external_exports.string().optional(),
     workflow_execution_id: external_exports.string().optional(),
     from: external_exports.string().optional().describe("RFC 3339 start of time window, e.g. 2026-06-01T00:00:00Z."),
     to: external_exports.string().optional().describe("RFC 3339 end of time window.")
   },
-  async ({ limit, offset, model, status, workflow_id, workflow_execution_id, from, to }) => text(
+  async ({ limit, offset, model, status, error_classification, workflow_id, workflow_execution_id, from, to }) => text(
     await eachRequest(
-      appendQuery("/v1/executions", { limit, offset, model, status, workflow_id, workflow_execution_id, from, to })
+      appendQuery("/v1/executions", {
+        limit,
+        offset,
+        model,
+        status,
+        error_classification: error_classification?.join(","),
+        workflow_id,
+        workflow_execution_id,
+        from,
+        to
+      })
     )
   )
+);
+registerTool(
+  "eachlabs_summarize_usage",
+  {
+    title: "Summarize usage and cost",
+    description: "Summarize authenticated execution history without returning prompts or outputs. Groups spend, runtime, success, and failure counts by model, workflow, or status.",
+    annotations: { ...readOnly }
+  },
+  {
+    max_records: external_exports.number().int().min(1).max(500).default(100),
+    offset: external_exports.number().int().min(0).default(0),
+    group_by: external_exports.enum(["model", "workflow", "status"]).default("model"),
+    top: external_exports.number().int().min(1).max(50).default(10),
+    model: external_exports.string().optional(),
+    status: external_exports.string().optional().describe("Comma-separated statuses: created, starting, success, error."),
+    workflow_id: external_exports.string().optional(),
+    from: external_exports.string().optional().describe("RFC 3339 start of time window."),
+    to: external_exports.string().optional().describe("RFC 3339 end of time window.")
+  },
+  async ({
+    max_records,
+    offset,
+    group_by,
+    top,
+    model,
+    status,
+    workflow_id,
+    from,
+    to
+  }) => {
+    const executions = [];
+    let nextOffset = offset;
+    let upstreamTotal;
+    while (executions.length < max_records) {
+      const limit = Math.min(100, max_records - executions.length);
+      const response = await eachRequest(
+        appendQuery("/v1/executions", {
+          limit,
+          offset: nextOffset,
+          model,
+          status,
+          workflow_id,
+          from,
+          to
+        })
+      );
+      const page = Array.isArray(response) ? response : response && typeof response === "object" && Array.isArray(
+        response.executions
+      ) ? response.executions : [];
+      if (response && typeof response === "object" && Number.isFinite(
+        Number(response.total_count)
+      )) {
+        upstreamTotal = Number(
+          response.total_count
+        );
+      }
+      executions.push(...page);
+      nextOffset += page.length;
+      if (page.length < limit || upstreamTotal !== void 0 && nextOffset >= upstreamTotal) {
+        break;
+      }
+    }
+    return text({
+      ...summarizeExecutions(executions, group_by, top),
+      requested_offset: offset,
+      upstream_total_count: upstreamTotal ?? null,
+      sampled_all_matching: upstreamTotal === void 0 ? executions.length < max_records : offset + executions.length >= upstreamTotal
+    });
+  }
+);
+registerTool(
+  "eachlabs_diagnose_run",
+  {
+    title: "Diagnose a failed run",
+    description: "Fetch a prediction or workflow execution and return deterministic local triage with safe retry guidance. Does not create or retry work.",
+    annotations: { ...readOnly }
+  },
+  {
+    kind: external_exports.enum(["prediction", "workflow"]),
+    run_id: external_exports.string().min(1),
+    include_raw: external_exports.boolean().default(false).describe(
+      "Include the full upstream run record, which may contain prompts, outputs, or logs."
+    )
+  },
+  async ({ kind, run_id, include_raw }) => {
+    const run = kind === "workflow" ? await eachRequest(
+      workflowExecutionPath(run_id)
+    ) : await eachRequest(
+      `/v1/prediction/${encodeURIComponent(run_id)}`
+    );
+    return text({
+      kind,
+      run_id,
+      ...diagnoseRunRecord(run),
+      ...include_raw ? { raw: run } : {}
+    });
+  }
+);
+registerTool(
+  "eachlabs_export_debug_bundle",
+  {
+    title: "Export privacy-safe debug bundle",
+    description: "Fetch a prediction or workflow execution and return a shareable diagnostic bundle. Prompts, inputs, outputs, logs, media URLs, credentials, secrets, and tokens are excluded.",
+    annotations: { ...readOnly }
+  },
+  {
+    kind: external_exports.enum(["prediction", "workflow"]),
+    run_id: external_exports.string().min(1)
+  },
+  async ({ kind, run_id }) => {
+    const run = kind === "workflow" ? await eachRequest(
+      workflowExecutionPath(run_id)
+    ) : await eachRequest(
+      `/v1/prediction/${encodeURIComponent(run_id)}`
+    );
+    return text(buildDebugBundle(kind, run, SERVER_VERSION));
+  }
+);
+registerTool(
+  "eachlabs_audio_transcribe",
+  {
+    title: "Transcribe audio",
+    description: "Transcribe a local audio file through POST /v1/audio/transcriptions. Files are sent as multipart form data and must be 25 MB or smaller.",
+    annotations: { ...write }
+  },
+  {
+    file_path: external_exports.string().min(1).describe("Absolute path to a local audio file."),
+    model: external_exports.string().min(1).default("openai/whisper-large-v3"),
+    language: external_exports.string().min(2).optional().describe("Optional language code."),
+    response_format: external_exports.enum(["json", "verbose_json"]).default("json"),
+    timestamp_granularities: external_exports.array(external_exports.enum(["word", "segment"])).max(2).optional().describe("Timestamp detail; use verbose_json when requesting timestamps.")
+  },
+  async ({ file_path, model, language, response_format, timestamp_granularities }, extra) => text(
+    await transcribeAudio(
+      {
+        filePath: file_path,
+        model,
+        language,
+        responseFormat: response_format,
+        timestampGranularities: timestamp_granularities
+      },
+      extra?.signal
+    )
+  )
+);
+registerTool(
+  "eachlabs_audio_speech",
+  {
+    title: "Generate speech audio",
+    description: "Generate speech through POST /v1/audio/speech and return the streamed MP3 or PCM response as an MCP audio block.",
+    annotations: { ...write }
+  },
+  {
+    model: external_exports.string().min(1),
+    input: external_exports.string().min(1).max(2e3),
+    voice: external_exports.string().min(1),
+    format: external_exports.enum(["mp3", "pcm"]).default("mp3"),
+    speed: external_exports.number().min(0.25).max(4).optional(),
+    instructions: external_exports.string().max(1e3).optional()
+  },
+  async ({ model, input, voice, format, speed, instructions }, extra) => {
+    const audio = await synthesizeSpeech(
+      { model, input, voice, format, speed, instructions },
+      extra?.signal
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: compact({
+            generated: true,
+            execution_id: audio.executionId,
+            request_id: audio.requestId,
+            mime_type: audio.mimeType
+          })
+        },
+        { type: "audio", data: audio.data, mimeType: audio.mimeType }
+      ]
+    };
+  }
 );
 registerTool(
   "eachlabs_presign_upload",
@@ -24242,7 +26700,7 @@ registerTool(
   {
     content_type: external_exports.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
     file_type: external_exports.enum(["image", "video", "audio", "other"]).default("other"),
-    expires_in_seconds: external_exports.number().int().min(1).optional().describe("Optional retention control for the stored file.")
+    expires_in_seconds: external_exports.number().int().min(60).max(31536e3).optional().describe("Optional retention control for the stored file.")
   },
   async ({ content_type, file_type, expires_in_seconds }) => text(
     await eachRequest("/v1/upload/presign", {
@@ -24260,35 +26718,41 @@ registerTool(
   },
   {
     file_path: external_exports.string().min(1).describe("Absolute local file path."),
-    content_type: external_exports.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
+    content_type: external_exports.string().min(1).optional().describe("Optional MIME type. Inferred from the file signature or extension when omitted."),
     file_type: external_exports.enum(["image", "video", "audio", "other"]).default("other"),
-    expires_in_seconds: external_exports.number().int().min(1).optional().describe("Optional retention control for the stored file.")
+    expires_in_seconds: external_exports.number().int().min(60).max(31536e3).optional().describe("Optional retention control for the stored file."),
+    timeout_seconds: external_exports.number().int().min(10).max(600).default(120)
   },
-  async ({ file_path, content_type, file_type, expires_in_seconds }) => {
-    const info = await stat(file_path);
+  async ({ file_path, content_type, file_type, expires_in_seconds, timeout_seconds }, extra) => {
+    const info = await stat2(file_path);
+    if (!info.isFile()) {
+      return errorText({ uploaded: false, error: "file_path must point to a regular file." });
+    }
     if (info.size > MAX_UPLOAD_BYTES) {
       return errorText({
         uploaded: false,
         error: `File is ${info.size} bytes; the documented upload limit is 100 MB.`
       });
     }
+    const resolvedContentType = await inferContentType(file_path, content_type);
     const presign = await eachRequest("/v1/upload/presign", {
       method: "POST",
-      body: JSON.stringify({ content_type, file_type, expires_in_seconds })
+      body: JSON.stringify({ content_type: resolvedContentType, file_type, expires_in_seconds }),
+      signal: extra?.signal
     });
     const presignedUrl = String(presign.presigned_url ?? "");
     if (!presignedUrl) {
       return errorText({ uploaded: false, presign, error: "presigned_url missing from response." });
     }
     const requiredHeaders = presign.required_headers && typeof presign.required_headers === "object" ? presign.required_headers : {};
-    const bytes = await readFile(file_path);
-    const uploadResponse = await fetch(presignedUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": content_type,
-        ...requiredHeaders
-      },
-      body: bytes
+    const uploadResponse = await uploadFileStream({
+      url: presignedUrl,
+      filePath: file_path,
+      contentType: resolvedContentType,
+      requiredHeaders,
+      size: info.size,
+      timeoutMs: timeout_seconds * 1e3,
+      extra
     });
     if (!uploadResponse.ok) {
       return errorText({
@@ -24346,113 +26810,136 @@ registerTool(
   },
   async ({ execution_id }) => text(await eachRequest(`/v1/webhooks/${execution_id}`))
 );
-registerTool(
-  "eachlabs_list_flags",
-  {
-    title: "List each::flags",
-    description: "List each::flags feature flags for the authenticated organization. The public docs for this beta surface may lag the API; use query/path overrides if Eachlabs publishes a more specific shape.",
-    annotations: { ...readOnly }
-  },
-  {
-    query: jsonObjectSchema.default({}).describe("Query string parameters, for example limit, offset, environment, or project."),
-    path: external_exports.string().min(1).default("/v1/flags").describe("Flags list endpoint path.")
-  },
-  async ({ query, path }) => text(await eachRequest(appendQuery(normalizePath(path), query)))
-);
-registerTool(
-  "eachlabs_get_flag",
-  {
-    title: "Get each::flags flag",
-    description: "Fetch one each::flags feature flag by key. The default path is /v1/flags/{flag_key}; override path if upstream docs use another route.",
-    annotations: { ...readOnly }
-  },
-  {
-    flag_key: external_exports.string().min(1).describe("Feature flag key."),
-    query: jsonObjectSchema.default({}).describe("Optional query string parameters, such as environment."),
-    path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Path template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
-  },
-  async ({ flag_key, query, path }) => text(await eachRequest(appendQuery(flagPath(path, flag_key), query)))
-);
-registerTool(
-  "eachlabs_evaluate_flag",
-  {
-    title: "Evaluate each::flags flag",
-    description: "Evaluate an each::flags feature flag for a context. Defaults to POST /v1/flags/evaluate with {flag_key, context, default_value}; pass body/path to match the exact upstream contract if needed.",
-    annotations: { ...write, idempotentHint: true }
-  },
-  {
-    flag_key: external_exports.string().min(1).optional().describe("Feature flag key. Optional when body already contains the upstream-required identifier."),
-    context: jsonObjectSchema.default({}).describe("Evaluation context such as user, tenant, environment, or attributes."),
-    default_value: external_exports.unknown().optional().describe("Fallback value if the flag cannot be evaluated."),
-    extra: jsonObjectSchema.default({}).describe("Additional fields to merge into the default evaluation body."),
-    body: jsonObjectSchema.optional().describe("Exact upstream request body. When provided, it replaces flag_key/context/default_value/extra."),
-    path: external_exports.string().min(1).default("/v1/flags/evaluate").describe("Evaluation endpoint path. Supports {flag_key} or :flag_key placeholders.")
-  },
-  async ({ flag_key, context, default_value, extra, body, path }) => {
-    if (!body && !flag_key) {
-      return errorText({
-        evaluated: false,
-        error: "Provide flag_key, or pass body with the exact upstream evaluation payload."
-      });
+if (ENABLE_EXPERIMENTAL_FLAGS) {
+  registerTool(
+    "eachlabs_list_flags",
+    {
+      title: "List each::flags",
+      description: "List each::flags feature flags for the authenticated organization. The public docs for this beta surface may lag the API; use query/path overrides if Eachlabs publishes a more specific shape.",
+      annotations: { ...readOnly }
+    },
+    {
+      query: jsonObjectSchema.default({}).describe("Query string parameters, for example limit, offset, environment, or project."),
+      path: external_exports.string().min(1).default("/v1/flags").describe("Flags list endpoint path.")
+    },
+    async ({ query, path: path2 }) => text(await eachRequest(appendQuery(normalizePath(path2), query)))
+  );
+  registerTool(
+    "eachlabs_get_flag",
+    {
+      title: "Get each::flags flag",
+      description: "Fetch one each::flags feature flag by key. The default path is /v1/flags/{flag_key}; override path if upstream docs use another route.",
+      annotations: { ...readOnly }
+    },
+    {
+      flag_key: external_exports.string().min(1).describe("Feature flag key."),
+      query: jsonObjectSchema.default({}).describe("Optional query string parameters, such as environment."),
+      path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Path template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
+    },
+    async ({ flag_key, query, path: path2 }) => text(await eachRequest(appendQuery(flagPath(path2, flag_key), query)))
+  );
+  registerTool(
+    "eachlabs_evaluate_flag",
+    {
+      title: "Evaluate each::flags flag",
+      description: "Evaluate an each::flags feature flag for a context. Defaults to POST /v1/flags/evaluate with {flag_key, context, default_value}; pass body/path to match the exact upstream contract if needed.",
+      annotations: { ...write, idempotentHint: true }
+    },
+    {
+      flag_key: external_exports.string().min(1).optional().describe("Feature flag key. Optional when body already contains the upstream-required identifier."),
+      context: jsonObjectSchema.default({}).describe("Evaluation context such as user, tenant, environment, or attributes."),
+      default_value: external_exports.unknown().optional().describe("Fallback value if the flag cannot be evaluated."),
+      extra: jsonObjectSchema.default({}).describe("Additional fields to merge into the default evaluation body."),
+      body: jsonObjectSchema.optional().describe("Exact upstream request body. When provided, it replaces flag_key/context/default_value/extra."),
+      path: external_exports.string().min(1).default("/v1/flags/evaluate").describe("Evaluation endpoint path. Supports {flag_key} or :flag_key placeholders.")
+    },
+    async ({ flag_key, context, default_value, extra, body, path: path2 }) => {
+      if (!body && !flag_key) {
+        return errorText({
+          evaluated: false,
+          error: "Provide flag_key, or pass body with the exact upstream evaluation payload."
+        });
+      }
+      return text(
+        await eachRequest(flagActionPath(path2, flag_key), {
+          method: "POST",
+          body: JSON.stringify(buildFlagEvaluationBody({ flag_key, context, default_value, extra, body }))
+        })
+      );
     }
-    return text(
-      await eachRequest(flagActionPath(path, flag_key), {
+  );
+  registerTool(
+    "eachlabs_create_flag",
+    {
+      title: "Create each::flags flag",
+      description: "Create an each::flags feature flag. This changes live flag configuration for the authenticated organization; confirm target environment/project before using.",
+      annotations: { ...write }
+    },
+    {
+      flag: jsonObjectSchema.describe("Create flag request body from the each::flags API."),
+      path: external_exports.string().min(1).default("/v1/flags").describe("Create flag endpoint path.")
+    },
+    async ({ flag, path: path2 }) => text(
+      await eachRequest(normalizePath(path2), {
         method: "POST",
-        body: JSON.stringify(buildFlagEvaluationBody({ flag_key, context, default_value, extra, body }))
+        body: JSON.stringify(flag)
       })
-    );
-  }
-);
+    )
+  );
+  registerTool(
+    "eachlabs_update_flag",
+    {
+      title: "Update each::flags flag",
+      description: "Update an each::flags feature flag. This may change live routing or rollout behavior; confirm the intended environment/project before using.",
+      annotations: { ...destructive }
+    },
+    {
+      flag_key: external_exports.string().min(1).optional().describe("Feature flag key. Optional only when path is already the exact upstream endpoint."),
+      updates: jsonObjectSchema.describe("Update flag request body from the each::flags API."),
+      method: external_exports.enum(["PATCH", "PUT"]).default("PATCH"),
+      path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Update path or template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
+    },
+    async ({ flag_key, updates, method, path: path2 }) => text(
+      await eachRequest(flagPath(path2, flag_key), {
+        method,
+        body: JSON.stringify(updates)
+      })
+    )
+  );
+  registerTool(
+    "eachlabs_delete_flag",
+    {
+      title: "Delete each::flags flag",
+      description: "Delete or archive an each::flags feature flag by key. This is a live configuration mutation and may be irreversible depending on the upstream API.",
+      annotations: { ...destructive }
+    },
+    {
+      flag_key: external_exports.string().min(1).describe("Feature flag key."),
+      path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Delete path or template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
+    },
+    async ({ flag_key, path: path2 }) => text(await eachRequest(flagPath(path2, flag_key), { method: "DELETE" }))
+  );
+}
 registerTool(
-  "eachlabs_create_flag",
+  "eachlabs_validate_workflow_definition",
   {
-    title: "Create each::flags flag",
-    description: "Create an each::flags feature flag. This changes live flag configuration for the authenticated organization; confirm target environment/project before using.",
-    annotations: { ...write }
+    title: "Validate workflow definition",
+    description: "Lint a workflow definition before mutation. Checks step IDs/types, JSON Schema, references, branches, choices, version consistency, retry/timeout bounds, and optionally live model schemas.",
+    annotations: { ...readOnly }
   },
   {
-    flag: jsonObjectSchema.describe("Create flag request body from the each::flags API."),
-    path: external_exports.string().min(1).default("/v1/flags").describe("Create flag endpoint path.")
+    definition: jsonObjectSchema,
+    expected_version: external_exports.string().min(1).optional(),
+    mode: external_exports.enum(["structural", "live"]).default("live").describe("Live mode also resolves every model and validates its params against the current request schema."),
+    policy_checks: external_exports.boolean().default(false).describe("Optional static warnings for inline secrets and plain-HTTP endpoints; no external security scan is run.")
   },
-  async ({ flag, path }) => text(
-    await eachRequest(normalizePath(path), {
-      method: "POST",
-      body: JSON.stringify(flag)
+  async ({ definition, expected_version, mode, policy_checks }) => text(
+    await validateWorkflowDefinition(definition, {
+      expectedVersion: expected_version,
+      modelResolver: mode === "live" ? getModelBySlug : void 0,
+      policyChecks: policy_checks
     })
   )
-);
-registerTool(
-  "eachlabs_update_flag",
-  {
-    title: "Update each::flags flag",
-    description: "Update an each::flags feature flag. This may change live routing or rollout behavior; confirm the intended environment/project before using.",
-    annotations: { ...destructive }
-  },
-  {
-    flag_key: external_exports.string().min(1).optional().describe("Feature flag key. Optional only when path is already the exact upstream endpoint."),
-    updates: jsonObjectSchema.describe("Update flag request body from the each::flags API."),
-    method: external_exports.enum(["PATCH", "PUT"]).default("PATCH"),
-    path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Update path or template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
-  },
-  async ({ flag_key, updates, method, path }) => text(
-    await eachRequest(flagPath(path, flag_key), {
-      method,
-      body: JSON.stringify(updates)
-    })
-  )
-);
-registerTool(
-  "eachlabs_delete_flag",
-  {
-    title: "Delete each::flags flag",
-    description: "Delete or archive an each::flags feature flag by key. This is a live configuration mutation and may be irreversible depending on the upstream API.",
-    annotations: { ...destructive }
-  },
-  {
-    flag_key: external_exports.string().min(1).describe("Feature flag key."),
-    path: external_exports.string().min(1).default("/v1/flags/{flag_key}").describe("Delete path or template. Supports {flag_key} or :flag_key placeholders; otherwise flag_key is appended.")
-  },
-  async ({ flag_key, path }) => text(await eachRequest(flagPath(path, flag_key), { method: "DELETE" }))
 );
 registerTool(
   "eachlabs_list_workflow_categories",
@@ -24473,16 +26960,46 @@ registerTool(
   },
   {
     workflow: jsonObjectSchema.describe(
-      "CreateWorkflowRequest body from the each::workflows API, including name, description, categories, and definition."
-    )
+      "Current CreateWorkflowRequest body: name plus an optional definition. Other metadata fields are not accepted by the current route."
+    ),
+    validate_definition: external_exports.boolean().default(true),
+    validation_mode: external_exports.enum(["structural", "live"]).default("live"),
+    policy_checks: external_exports.boolean().default(false)
   },
-  async ({ workflow }) => text(
-    await eachRequest("/workflows", {
-      baseUrl: EACH_WORKFLOWS_BASE_URL,
-      method: "POST",
-      body: JSON.stringify(workflow)
-    })
-  )
+  async ({ workflow, validate_definition, validation_mode, policy_checks }) => {
+    const unsupportedFields = Object.keys(workflow).filter(
+      (field) => !["name", "definition"].includes(field)
+    );
+    if (typeof workflow.name !== "string" || !workflow.name.trim()) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation requires a non-empty name."
+      });
+    }
+    if (unsupportedFields.length > 0) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation accepts only name and definition.",
+        unsupported_fields: unsupportedFields
+      });
+    }
+    const definition = workflow.definition;
+    if (validate_definition && definition !== void 0) {
+      const validation = await validateWorkflowDefinition(definition, {
+        modelResolver: validation_mode === "live" ? getModelBySlug : void 0,
+        policyChecks: policy_checks
+      });
+      if (!validation.valid) {
+        return errorText({ created: false, validation });
+      }
+    }
+    return text(
+      await eachRequest("/v1/workflows", {
+        method: "POST",
+        body: JSON.stringify(workflow)
+      })
+    );
+  }
 );
 registerTool(
   "eachlabs_get_workflow",
@@ -24525,15 +27042,51 @@ registerTool(
   {
     workflow_id: external_exports.string().min(1),
     version_id: external_exports.string().min(1),
-    body: jsonObjectSchema.describe("UpsertVersionRequest body.")
+    body: jsonObjectSchema.describe("UpsertVersionRequest body."),
+    validate_definition: external_exports.boolean().default(true),
+    validation_mode: external_exports.enum(["structural", "live"]).default("live"),
+    policy_checks: external_exports.boolean().default(false)
   },
-  async ({ workflow_id, version_id, body }) => text(
-    await eachRequest(`/workflows/${workflow_id}/versions/${version_id}`, {
-      baseUrl: EACH_WORKFLOWS_BASE_URL,
-      method: "PUT",
-      body: JSON.stringify(body)
-    })
-  )
+  async ({
+    workflow_id,
+    version_id,
+    body,
+    validate_definition,
+    validation_mode,
+    policy_checks
+  }) => {
+    if (body.version_id !== void 0 && String(body.version_id) !== version_id) {
+      return errorText({
+        updated: false,
+        error: "body.version_id must match the version_id path parameter.",
+        expected: version_id,
+        received: body.version_id
+      });
+    }
+    if (!body.definition || typeof body.definition !== "object") {
+      return errorText({
+        updated: false,
+        error: "Current version upsert requires body.definition."
+      });
+    }
+    if (validate_definition) {
+      const validation = await validateWorkflowDefinition(body.definition, {
+        expectedVersion: version_id,
+        modelResolver: validation_mode === "live" ? getModelBySlug : void 0,
+        policyChecks: policy_checks
+      });
+      if (!validation.valid) {
+        return errorText({ updated: false, validation });
+      }
+    }
+    return text(
+      await eachRequest(`/workflows/${workflow_id}/versions/${version_id}`, {
+        baseUrl: EACH_WORKFLOWS_BASE_URL,
+        method: "PUT",
+        body: JSON.stringify(body)
+      })
+    );
+  }
 );
 registerTool(
   "eachlabs_execute_workflow",
@@ -24546,15 +27099,23 @@ registerTool(
     workflow_id: external_exports.string().min(1),
     inputs: jsonObjectSchema.default({}),
     version_id: external_exports.string().optional().describe("Defaults to the latest version."),
-    webhook_url: external_exports.string().url().optional()
+    webhook_url: external_exports.string().url().optional(),
+    webhook_secret: external_exports.string().min(1).optional()
   },
-  async ({ workflow_id, inputs, version_id, webhook_url }) => text(
-    await eachRequest(`/${workflow_id}/trigger`, {
-      baseUrl: EACH_WORKFLOWS_BASE_URL,
-      method: "POST",
-      body: JSON.stringify({ version_id, inputs, webhook_url })
-    })
-  )
+  async ({ workflow_id, inputs, version_id, webhook_url, webhook_secret }, extra) => {
+    const resolvedVersion = await resolveWorkflowVersionId(
+      workflow_id,
+      version_id,
+      extra?.signal
+    );
+    return text(
+      await eachRequest(workflowTriggerPath(workflow_id, resolvedVersion), {
+        method: "POST",
+        body: JSON.stringify({ inputs, webhook_url, webhook_secret }),
+        signal: extra?.signal
+      })
+    );
+  }
 );
 registerTool(
   "eachlabs_bulk_execute_workflow",
@@ -24567,15 +27128,23 @@ registerTool(
     workflow_id: external_exports.string().min(1),
     inputs: external_exports.array(jsonObjectSchema).min(1).max(10).describe("One input object per execution; the API allows 1-10 items."),
     version_id: external_exports.string().optional(),
-    webhook_url: external_exports.string().url().optional()
+    webhook_url: external_exports.string().url().optional(),
+    webhook_secret: external_exports.string().min(1).optional()
   },
-  async ({ workflow_id, inputs, version_id, webhook_url }) => text(
-    await eachRequest(`/${workflow_id}/bulk-trigger`, {
-      baseUrl: EACH_WORKFLOWS_BASE_URL,
-      method: "POST",
-      body: JSON.stringify({ version_id, inputs, webhook_url })
-    })
-  )
+  async ({ workflow_id, inputs, version_id, webhook_url, webhook_secret }, extra) => {
+    const resolvedVersion = await resolveWorkflowVersionId(
+      workflow_id,
+      version_id,
+      extra?.signal
+    );
+    return text(
+      await eachRequest(workflowTriggerPath(workflow_id, resolvedVersion, true), {
+        method: "POST",
+        body: JSON.stringify({ inputs, webhook_url, webhook_secret }),
+        signal: extra?.signal
+      })
+    );
+  }
 );
 registerTool(
   "eachlabs_list_workflow_executions",
@@ -24591,8 +27160,8 @@ registerTool(
     bulk_id: external_exports.string().optional()
   },
   async ({ workflow_id, limit, offset, bulk_id }) => text(
-    await eachRequest(appendQuery(`/workflows/${workflow_id}/executions`, { limit, offset, bulk_id }), {
-      baseUrl: EACH_WORKFLOWS_BASE_URL
+    await eachRequest(appendQuery(`/v1/workflows/${workflow_id}/executions`, { limit, offset, bulk_id }), {
+      baseUrl: EACH_API_BASE_URL
     })
   )
 );
@@ -24610,18 +27179,20 @@ registerTool(
     poll_interval_seconds: external_exports.number().min(0.5).max(30).default(5).describe("Only used when wait=true.")
   },
   async ({ execution_id, wait, timeout_seconds, poll_interval_seconds }, extra) => {
-    const fetchExecution = () => eachRequest(`/executions/${execution_id}`, {
-      baseUrl: EACH_WORKFLOWS_BASE_URL
+    const fetchExecution = () => eachRequest(workflowExecutionPath(execution_id), {
+      signal: extra?.signal
     });
     if (!wait) return text(await fetchExecution());
-    const { completed, last } = await pollUntilDone(
+    const { completed, cancelled, last } = await pollUntilDone(
       fetchExecution,
       WORKFLOW_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra
     );
-    return text(completed ? last : { status: "timeout", execution_id, last });
+    return text(
+      completed ? last : { status: cancelled ? "cancelled_by_client" : "timeout", execution_id, last }
+    );
   }
 );
 registerTool(
@@ -24654,14 +27225,17 @@ registerTool(
     nickname: external_exports.string().min(1).describe("Organization nickname without @."),
     slug: external_exports.string().min(1),
     version_id: external_exports.string().min(1),
-    inputs: jsonObjectSchema.default({}),
-    webhook_url: external_exports.string().url().optional()
+    inputs: jsonObjectSchema.default({})
   },
-  async ({ nickname, slug, version_id, inputs, webhook_url }) => text(
+  async ({ nickname, slug, version_id, inputs }) => text(
     await eachRequest(`/public/@${nickname}/workflows/${slug}/versions/${version_id}/trigger`, {
       baseUrl: EACH_WORKFLOWS_BASE_URL,
       method: "POST",
-      body: JSON.stringify({ inputs, webhook_url })
+      auth: false,
+      body: JSON.stringify({
+        api_key: requireApiKey(),
+        inputs
+      })
     })
   )
 );
@@ -24676,8 +27250,10 @@ registerTool(
     model: external_exports.string().min(1).default("eachsense/beta"),
     messages: external_exports.array(chatMessageSchema).min(1),
     stream: external_exports.boolean().default(true).describe(
-      "Use upstream streaming, aggregated server-side (recommended: progress notifications, no idle timeout). false requests a single buffered JSON response."
+      "Use upstream streaming, aggregated server-side with progress notifications. false requests a single buffered JSON response."
     ),
+    stream_timeout_seconds: external_exports.number().int().min(30).max(900).default(900).describe("Idle timeout for streaming responses. Each event resets the timer."),
+    include_raw_safe_events: external_exports.boolean().default(false).describe("Include bounded non-reasoning status/tool/progress events in raw_safe_events."),
     session_id: external_exports.string().optional().describe("Continue an existing each::sense session."),
     mode: external_exports.enum(["max", "eco"]).optional(),
     behavior: external_exports.enum(["agent", "plan", "ask"]).optional(),
@@ -24689,12 +27265,15 @@ registerTool(
     tool_choice: external_exports.unknown().optional(),
     temperature: external_exports.number().min(0).max(2).optional(),
     max_tokens: external_exports.number().int().min(1).optional(),
+    enable_safety_checker: external_exports.boolean().optional().describe("Top-level each::sense safety-checker control."),
     extra: jsonObjectSchema.default({}).describe("Additional provider-specific request fields.")
   },
   async ({
     model,
     messages,
     stream,
+    stream_timeout_seconds,
+    include_raw_safe_events,
     session_id,
     mode,
     behavior,
@@ -24706,9 +27285,11 @@ registerTool(
     tool_choice,
     temperature,
     max_tokens,
+    enable_safety_checker,
     extra
   }, handlerExtra) => {
     const payload = {
+      ...extra,
       model,
       messages,
       session_id,
@@ -24722,13 +27303,18 @@ registerTool(
       tool_choice,
       temperature,
       max_tokens,
-      ...extra
+      enable_safety_checker
     };
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/chat/completions",
-          { baseUrl: EACH_SENSE_V1_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_V1_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events
+          },
           handlerExtra
         )
       );
@@ -24765,15 +27351,30 @@ registerTool(
     workflow_id: external_exports.string().optional(),
     version_id: external_exports.string().optional(),
     session_id: external_exports.string().optional(),
-    stream: external_exports.boolean().default(false).describe("Consume upstream streaming server-side for progress notifications; the final result is the same.")
+    stream: external_exports.boolean().default(false).describe("Consume upstream streaming server-side for progress notifications; the final result is the same."),
+    stream_timeout_seconds: external_exports.number().int().min(30).max(900).default(900),
+    include_raw_safe_events: external_exports.boolean().default(false)
   },
-  async ({ message, workflow_id, version_id, session_id, stream }, handlerExtra) => {
+  async ({
+    message,
+    workflow_id,
+    version_id,
+    session_id,
+    stream,
+    stream_timeout_seconds,
+    include_raw_safe_events
+  }, handlerExtra) => {
     const payload = { message, workflow_id, version_id, session_id };
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/workflow",
-          { baseUrl: EACH_SENSE_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events
+          },
           handlerExtra
         )
       );
@@ -24866,7 +27467,6 @@ registerTool(
   async ({ model, messages, temperature, max_tokens, webhook_url, extra }) => text(
     await eachRequest("/v1/chat/completions", {
       method: "POST",
-      bearer: true,
       timeoutMs: 3e5,
       headers: webhook_url ? { "X-Eachlabs-Webhook-Url": webhook_url } : void 0,
       body: JSON.stringify({ model, messages, temperature, max_tokens, stream: false, ...extra })
@@ -24887,17 +27487,25 @@ registerTool(
     query: jsonObjectSchema.default({}),
     body: external_exports.unknown().optional(),
     auth: external_exports.boolean().default(true),
-    bearer: external_exports.boolean().default(false).describe("Use Authorization: Bearer instead of X-API-Key.")
+    auth_mode: external_exports.enum(["bearer", "x-api-key"]).default("bearer").describe("Bearer is the current documented default; x-api-key is retained for legacy endpoints."),
+    bearer: external_exports.boolean().optional().describe("Deprecated compatibility switch. true maps to bearer; false maps to x-api-key.")
   },
-  async ({ target, method, path, query, body, auth: auth2, bearer }) => {
+  async ({ target, method, path: path2, query, body, auth: auth2, auth_mode, bearer }) => {
+    const policyError = rawRequestPolicyError(method, auth2);
+    if (policyError) {
+      return errorText({
+        blocked: true,
+        error: policyError
+      });
+    }
     const baseUrl = target === "workflows" ? EACH_WORKFLOWS_BASE_URL : target === "sense_v1" ? EACH_SENSE_V1_BASE_URL : target === "sense" ? EACH_SENSE_BASE_URL : EACH_API_BASE_URL;
-    const requestPath = appendQuery(path.startsWith("/") ? path : `/${path}`, query);
+    const requestPath = appendQuery(path2.startsWith("/") ? path2 : `/${path2}`, query);
     return text(
       await eachRequest(requestPath, {
         baseUrl,
         method,
         auth: auth2,
-        bearer,
+        authMode: bearer === void 0 ? auth_mode : bearer ? "bearer" : "x-api-key",
         body: body === void 0 ? void 0 : JSON.stringify(body)
       })
     );
@@ -24912,30 +27520,42 @@ registerTool(
   },
   {},
   async () => {
-    const catalog = await eachRequest(appendQuery("/v1/models", { limit: 1, offset: 0 }), {
-      auth: false
-    });
+    const [catalogResult, updateResult] = await Promise.allSettled([
+      eachRequest(appendQuery("/v1/models", { limit: 1, offset: 0 }), {
+        auth: false,
+        timeoutMs: 5e3,
+        retries: 0
+      }),
+      fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(5e3) })
+    ]);
+    const catalog = catalogResult.status === "fulfilled" ? Array.isArray(catalogResult.value) ? { reachable: true, sample_size: catalogResult.value.length } : { reachable: true, response: catalogResult.value } : {
+      reachable: false,
+      error: catalogResult.reason instanceof Error ? catalogResult.reason.message : String(catalogResult.reason)
+    };
     let update = { current_version: SERVER_VERSION };
     try {
-      const response = await fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(5e3) });
+      if (updateResult.status === "rejected") throw updateResult.reason;
+      const response = updateResult.value;
       if (response.ok) {
         const remote = await response.json();
         update = {
           current_version: SERVER_VERSION,
           latest_version: remote.version ?? "unknown",
           update_available: Boolean(remote.version && remote.version !== SERVER_VERSION),
-          how_to_update: "git pull && npm install && npm run build (or `npm run update`)"
+          how_to_update: "Marketplace installs: update through the Codex/Claude plugin marketplace. Source checkouts: npm ci && npm run build."
         };
+      } else {
+        update.update_check = `HTTP ${response.status}`;
       }
-    } catch {
-      update.update_check = "unreachable";
+    } catch (error2) {
+      update.update_check = error2 instanceof Error ? error2.message : "unreachable";
     }
     return text({
       api_base_url: EACH_API_BASE_URL,
       workflows_base_url: EACH_WORKFLOWS_BASE_URL,
       sense_base_url: EACH_SENSE_BASE_URL,
       api_key_configured: Boolean(EACH_API_KEY),
-      catalog_probe: Array.isArray(catalog) ? { reachable: true, sample_size: catalog.length } : catalog,
+      catalog_probe: catalog,
       update
     });
   }
@@ -24995,6 +27615,88 @@ server.registerPrompt(
     ]
   })
 );
+server.registerPrompt(
+  "eachlabs-choose-model",
+  {
+    title: "Choose an each::labs model",
+    description: "Find and compare suitable models without running predictions or spending credits.",
+    argsSchema: {
+      use_case: external_exports.string().describe(
+        "What the developer needs, e.g. 'image-to-video with a duration control'."
+      ),
+      required_fields: external_exports.string().optional().describe("Optional comma-separated required input fields.")
+    }
+  },
+  ({ use_case, required_fields }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: [
+            `Choose the best each::labs model for: ${use_case}`,
+            required_fields ? `Required input fields: ${required_fields}.` : "",
+            "Do not run a prediction. Search or recommend candidates, compare the strongest 2-5 with eachlabs_compare_models,",
+            "and explain the recommendation using provider, request fields, constraints, output type, and catalog p50 latency.",
+            "State clearly that p50 is not a price or quality guarantee."
+          ].filter(Boolean).join("\n")
+        }
+      }
+    ]
+  })
+);
+server.registerPrompt(
+  "eachlabs-debug-run",
+  {
+    title: "Debug an each::labs run",
+    description: "Diagnose a prediction or workflow execution without automatically retrying paid work.",
+    argsSchema: {
+      kind: external_exports.enum(["prediction", "workflow"]),
+      run_id: external_exports.string().describe("Prediction ID or workflow execution ID.")
+    }
+  },
+  ({ kind, run_id }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: [
+            `Diagnose this each::labs ${kind} run: ${run_id}`,
+            "Use eachlabs_diagnose_run first. Explain the evidence, likely cause, and safest next action.",
+            "Do not create or retry a paid run automatically. Check execution history before recommending a retry when the write result may be ambiguous."
+          ].join("\n")
+        }
+      }
+    ]
+  })
+);
+server.registerPrompt(
+  "eachlabs-developer-checkup",
+  {
+    title: "Audit an each::labs integration",
+    description: "Review a model or workflow integration for schema drift, safe retries, observability, and production readiness without spending credits.",
+    argsSchema: {
+      target: external_exports.string().describe("Model slug, workflow definition, or integration description to review.")
+    }
+  },
+  ({ target }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: [
+            `Audit this each::labs integration for developer readiness: ${target}`,
+            "Do not run paid predictions. Inspect the live model schema where applicable, compare it with any supplied baseline,",
+            "validate and diff workflow definitions, check async polling/webhook behavior, and generate a privacy-safe debug bundle for failed run IDs.",
+            "Call out breaking schema changes, ambiguous-write retry risks, secret handling, media URL safety, observability gaps, and the exact pre-production checks."
+          ].join("\n")
+        }
+      }
+    ]
+  })
+);
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -25028,14 +27730,31 @@ if (isMainModule) {
 }
 export {
   appendQuery,
+  buildDebugBundle,
   buildFlagEvaluationBody,
   collectMediaUrls,
+  compareModelRecords,
+  diagnoseRunRecord,
+  diffModelSchemas,
+  diffWorkflowDefinitions,
   flagActionPath,
   flagPath,
   generateExampleInput,
   joinUrl,
+  modelDeveloperSummary,
+  summarizeExecutions,
   summarizeJsonSchema,
   trimModel,
-  validateAgainstSchema
+  validateAgainstSchema,
+  workflowExecutionPath,
+  workflowTriggerPath
 };
-//# sourceMappingURL=index.js.map
+/*! Bundled license information:
+
+content-type/index.js:
+  (*!
+   * content-type
+   * Copyright(c) 2015 Douglas Christopher Wilson
+   * MIT Licensed
+   *)
+*/

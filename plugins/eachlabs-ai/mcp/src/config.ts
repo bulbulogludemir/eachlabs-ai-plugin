@@ -37,7 +37,7 @@ export const ENABLE_EXPERIMENTAL_FLAGS =
 export const UPDATE_CHECK_URL =
   "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
 
-export const SERVER_VERSION = "0.4.0";
+export const SERVER_VERSION = "0.5.0";
 
 // The prediction detail reference still documents `failed`, while the July 7
 // changelog and execution history reference use `error`. Treat both as

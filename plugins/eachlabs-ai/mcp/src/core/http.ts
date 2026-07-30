@@ -10,12 +10,25 @@ export class EachlabsError extends Error {
     readonly status?: number,
     readonly payload?: unknown,
     readonly ambiguousWrite = false,
+    readonly requestMetadata?: RequestMetadata,
   ) {
     super(message);
   }
 }
 
 export type AuthMode = "bearer" | "x-api-key";
+
+export type RequestMetadata = {
+  attempts: number;
+  retryable: boolean;
+  retryAfterSeconds?: number;
+  requestId?: string;
+  rateLimit?: {
+    limit?: string;
+    remaining?: string;
+    reset?: string;
+  };
+};
 
 export type EachRequestOptions = Omit<RequestInit, "signal"> & {
   baseUrl?: string;
@@ -61,17 +74,45 @@ export function retryDelayMs(
   if (retryAfter) {
     const seconds = Number(retryAfter);
     if (Number.isFinite(seconds) && seconds > 0) {
-      return Math.min(seconds * 1000, 10_000);
+      return Math.min(seconds * 1000, 60_000);
     }
 
     const dateMs = Date.parse(retryAfter);
     if (Number.isFinite(dateMs)) {
-      return Math.max(0, Math.min(dateMs - Date.now(), 10_000));
+      return Math.max(0, Math.min(dateMs - Date.now(), 60_000));
     }
   }
 
   const base = Math.min(2 ** attempt * 1000, 10_000);
   return Math.min(Math.round(base * (0.75 + random() * 0.5)), 10_000);
+}
+
+export function responseMetadata(
+  response: Response,
+  attempts: number,
+  retryable: boolean,
+): RequestMetadata {
+  const retryAfter = response.headers.get("retry-after");
+  const retryAfterMs = retryAfter
+    ? retryDelayMs(1, retryAfter, () => 0)
+    : undefined;
+  const limit = response.headers.get("x-ratelimit-limit") ?? undefined;
+  const remaining =
+    response.headers.get("x-ratelimit-remaining") ?? undefined;
+  const reset = response.headers.get("x-ratelimit-reset") ?? undefined;
+
+  return {
+    attempts,
+    retryable,
+    retryAfterSeconds:
+      retryAfterMs === undefined ? undefined : retryAfterMs / 1000,
+    requestId:
+      response.headers.get("x-request-id") ??
+      response.headers.get("x-eachlabs-request-id") ??
+      undefined,
+    rateLimit:
+      limit || remaining || reset ? { limit, remaining, reset } : undefined,
+  };
 }
 
 export function isRetrySafeMethod(method: string): boolean {
@@ -172,6 +213,10 @@ export async function eachRequest<T>(
           undefined,
           undefined,
           ambiguousWrite,
+          {
+            attempts: attempt,
+            retryable: retrySafe,
+          },
         );
       }
       await abortableSleep(retryDelayMs(attempt, null), signal);
@@ -197,6 +242,8 @@ export async function eachRequest<T>(
         `Eachlabs API returned HTTP ${response.status} for ${url.pathname}`,
         response.status,
         payload,
+        false,
+        responseMetadata(response, attempt, retryable),
       );
     }
 

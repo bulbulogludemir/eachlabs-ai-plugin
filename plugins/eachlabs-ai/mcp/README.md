@@ -11,6 +11,8 @@ It exposes the parts an agent needs to work well with Eachlabs:
 - upload and delete media files via presigned storage
 - inspect webhook deliveries
 - create, update, version, trigger, bulk-trigger, and monitor workflows
+- lint workflow definitions locally or against live model schemas before mutation
+- generate deterministic TypeScript, Python, or cURL integrations from live model schemas
 - fetch and trigger public/unlisted workflow versions
 - chat through each::sense and the OpenAI-compatible LLM router
 
@@ -97,6 +99,7 @@ Catalog and schemas:
 - `eachlabs_validate_model_input`
 - `eachlabs_find_models_by_schema`
 - `eachlabs_recommend_models`
+- `eachlabs_generate_integration_code`
 - `eachlabs_api_health`
 
 Predictions and history:
@@ -133,6 +136,7 @@ Experimental each::flags (only registered with `EACHLABS_ENABLE_EXPERIMENTAL_FLA
 
 Workflows:
 
+- `eachlabs_validate_workflow_definition`
 - `eachlabs_list_workflow_categories`
 - `eachlabs_create_workflow`
 - `eachlabs_get_workflow`
@@ -178,6 +182,10 @@ For workflows, fetch or create the workflow, trigger it, then poll with `eachlab
 ## Notes
 
 The model list endpoint is public in the current API. Authenticated REST calls use `Authorization: Bearer`. The raw request tool retains an explicit `x-api-key` compatibility mode for legacy endpoints.
+
+each::sense streaming uses a configurable 30–900 second idle timeout, retries only explicit pre-stream `429/502/503/504` responses, suppresses reasoning events, and returns normalized generation, clarification, workflow, and error buckets.
+
+Workflow creation/version upsert validates definitions by default. `structural` mode is local-only; `live` mode also resolves models and checks params against current request schemas. Optional policy warnings are off unless explicitly requested.
 
 The workflows API documents no `GET /workflows` list endpoint, so there is no list-workflows tool — use `eachlabs_get_workflow` with a known ID or slug, or `eachlabs_list_executions` to discover workflow IDs from past runs.
 

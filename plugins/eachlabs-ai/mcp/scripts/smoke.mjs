@@ -21,7 +21,7 @@ const check = (label, ok, detail = "") => {
 };
 
 const { tools } = await client.listTools();
-check("stable tool count", tools.length === 42, `${tools.length} tools`);
+check("stable tool count", tools.length === 44, `${tools.length} tools`);
 check(
   "experimental flags hidden by default",
   [
@@ -36,6 +36,12 @@ check(
 check("audio tools registered", ["eachlabs_audio_transcribe", "eachlabs_audio_speech"].every(
   (name) => tools.some((tool) => tool.name === name),
 ));
+check(
+  "developer tools registered",
+  ["eachlabs_validate_workflow_definition", "eachlabs_generate_integration_code"].every(
+    (name) => tools.some((tool) => tool.name === name),
+  ),
+);
 check(
   "annotations present",
   tools.every((tool) => tool.annotations?.readOnlyHint !== undefined),

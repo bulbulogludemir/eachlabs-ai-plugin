@@ -12,6 +12,24 @@ const ajv = new AjvConstructor({
 
 const compiledSchemas = new WeakMap<object, ValidateFunction>();
 
+export function checkJsonSchema(schema: unknown): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!schema || typeof schema !== "object") {
+    return { valid: false, error: "Schema must be a JSON object." };
+  }
+  try {
+    ajv.compile(schema);
+    return { valid: true };
+  } catch (error) {
+    return {
+      valid: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function schemaRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)

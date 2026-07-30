@@ -7172,8 +7172,8 @@ var ZodIssueCode = util.arrayToEnum([
   "not_finite"
 ]);
 var quotelessJson = (obj) => {
-  const json = JSON.stringify(obj, null, 2);
-  return json.replace(/"([^"]+)":/g, "$1:");
+  const json2 = JSON.stringify(obj, null, 2);
+  return json2.replace(/"([^"]+)":/g, "$1:");
 };
 var ZodError = class _ZodError extends Error {
   get errors() {
@@ -14125,24 +14125,24 @@ var JSONSchemaGenerator = class {
         const _json = result.schema;
         switch (def.type) {
           case "string": {
-            const json = _json;
-            json.type = "string";
+            const json2 = _json;
+            json2.type = "string";
             const { minimum, maximum, format, patterns, contentEncoding } = schema._zod.bag;
             if (typeof minimum === "number")
-              json.minLength = minimum;
+              json2.minLength = minimum;
             if (typeof maximum === "number")
-              json.maxLength = maximum;
+              json2.maxLength = maximum;
             if (format) {
-              json.format = formatMap[format] ?? format;
-              if (json.format === "")
-                delete json.format;
+              json2.format = formatMap[format] ?? format;
+              if (json2.format === "")
+                delete json2.format;
             }
             if (contentEncoding)
-              json.contentEncoding = contentEncoding;
+              json2.contentEncoding = contentEncoding;
             if (patterns && patterns.size > 0) {
               const regexes = [...patterns];
               if (regexes.length === 1)
-                json.pattern = regexes[0].source;
+                json2.pattern = regexes[0].source;
               else if (regexes.length > 1) {
                 result.schema.allOf = [
                   ...regexes.map((regex) => ({
@@ -14155,41 +14155,41 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "number": {
-            const json = _json;
+            const json2 = _json;
             const { minimum, maximum, format, multipleOf, exclusiveMaximum, exclusiveMinimum } = schema._zod.bag;
             if (typeof format === "string" && format.includes("int"))
-              json.type = "integer";
+              json2.type = "integer";
             else
-              json.type = "number";
+              json2.type = "number";
             if (typeof exclusiveMinimum === "number")
-              json.exclusiveMinimum = exclusiveMinimum;
+              json2.exclusiveMinimum = exclusiveMinimum;
             if (typeof minimum === "number") {
-              json.minimum = minimum;
+              json2.minimum = minimum;
               if (typeof exclusiveMinimum === "number") {
                 if (exclusiveMinimum >= minimum)
-                  delete json.minimum;
+                  delete json2.minimum;
                 else
-                  delete json.exclusiveMinimum;
+                  delete json2.exclusiveMinimum;
               }
             }
             if (typeof exclusiveMaximum === "number")
-              json.exclusiveMaximum = exclusiveMaximum;
+              json2.exclusiveMaximum = exclusiveMaximum;
             if (typeof maximum === "number") {
-              json.maximum = maximum;
+              json2.maximum = maximum;
               if (typeof exclusiveMaximum === "number") {
                 if (exclusiveMaximum <= maximum)
-                  delete json.maximum;
+                  delete json2.maximum;
                 else
-                  delete json.exclusiveMaximum;
+                  delete json2.exclusiveMaximum;
               }
             }
             if (typeof multipleOf === "number")
-              json.multipleOf = multipleOf;
+              json2.multipleOf = multipleOf;
             break;
           }
           case "boolean": {
-            const json = _json;
-            json.type = "boolean";
+            const json2 = _json;
+            json2.type = "boolean";
             break;
           }
           case "bigint": {
@@ -14237,23 +14237,23 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "array": {
-            const json = _json;
+            const json2 = _json;
             const { minimum, maximum } = schema._zod.bag;
             if (typeof minimum === "number")
-              json.minItems = minimum;
+              json2.minItems = minimum;
             if (typeof maximum === "number")
-              json.maxItems = maximum;
-            json.type = "array";
-            json.items = this.process(def.element, { ...params, path: [...params.path, "items"] });
+              json2.maxItems = maximum;
+            json2.type = "array";
+            json2.items = this.process(def.element, { ...params, path: [...params.path, "items"] });
             break;
           }
           case "object": {
-            const json = _json;
-            json.type = "object";
-            json.properties = {};
+            const json2 = _json;
+            json2.type = "object";
+            json2.properties = {};
             const shape = def.shape;
             for (const key in shape) {
-              json.properties[key] = this.process(shape[key], {
+              json2.properties[key] = this.process(shape[key], {
                 ...params,
                 path: [...params.path, "properties", key]
               });
@@ -14268,15 +14268,15 @@ var JSONSchemaGenerator = class {
               }
             }));
             if (requiredKeys.size > 0) {
-              json.required = Array.from(requiredKeys);
+              json2.required = Array.from(requiredKeys);
             }
             if (def.catchall?._zod.def.type === "never") {
-              json.additionalProperties = false;
+              json2.additionalProperties = false;
             } else if (!def.catchall) {
               if (this.io === "output")
-                json.additionalProperties = false;
+                json2.additionalProperties = false;
             } else if (def.catchall) {
-              json.additionalProperties = this.process(def.catchall, {
+              json2.additionalProperties = this.process(def.catchall, {
                 ...params,
                 path: [...params.path, "additionalProperties"]
               });
@@ -14284,15 +14284,15 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "union": {
-            const json = _json;
-            json.anyOf = def.options.map((x, i) => this.process(x, {
+            const json2 = _json;
+            json2.anyOf = def.options.map((x, i) => this.process(x, {
               ...params,
               path: [...params.path, "anyOf", i]
             }));
             break;
           }
           case "intersection": {
-            const json = _json;
+            const json2 = _json;
             const a = this.process(def.left, {
               ...params,
               path: [...params.path, "allOf", 0]
@@ -14306,17 +14306,17 @@ var JSONSchemaGenerator = class {
               ...isSimpleIntersection(a) ? a.allOf : [a],
               ...isSimpleIntersection(b) ? b.allOf : [b]
             ];
-            json.allOf = allOf;
+            json2.allOf = allOf;
             break;
           }
           case "tuple": {
-            const json = _json;
-            json.type = "array";
+            const json2 = _json;
+            json2.type = "array";
             const prefixItems = def.items.map((x, i) => this.process(x, { ...params, path: [...params.path, "prefixItems", i] }));
             if (this.target === "draft-2020-12") {
-              json.prefixItems = prefixItems;
+              json2.prefixItems = prefixItems;
             } else {
-              json.items = prefixItems;
+              json2.items = prefixItems;
             }
             if (def.rest) {
               const rest = this.process(def.rest, {
@@ -14324,29 +14324,29 @@ var JSONSchemaGenerator = class {
                 path: [...params.path, "items"]
               });
               if (this.target === "draft-2020-12") {
-                json.items = rest;
+                json2.items = rest;
               } else {
-                json.additionalItems = rest;
+                json2.additionalItems = rest;
               }
             }
             if (def.rest) {
-              json.items = this.process(def.rest, {
+              json2.items = this.process(def.rest, {
                 ...params,
                 path: [...params.path, "items"]
               });
             }
             const { minimum, maximum } = schema._zod.bag;
             if (typeof minimum === "number")
-              json.minItems = minimum;
+              json2.minItems = minimum;
             if (typeof maximum === "number")
-              json.maxItems = maximum;
+              json2.maxItems = maximum;
             break;
           }
           case "record": {
-            const json = _json;
-            json.type = "object";
-            json.propertyNames = this.process(def.keyType, { ...params, path: [...params.path, "propertyNames"] });
-            json.additionalProperties = this.process(def.valueType, {
+            const json2 = _json;
+            json2.type = "object";
+            json2.propertyNames = this.process(def.keyType, { ...params, path: [...params.path, "propertyNames"] });
+            json2.additionalProperties = this.process(def.valueType, {
               ...params,
               path: [...params.path, "additionalProperties"]
             });
@@ -14365,17 +14365,17 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "enum": {
-            const json = _json;
+            const json2 = _json;
             const values = getEnumValues(def.entries);
             if (values.every((v) => typeof v === "number"))
-              json.type = "number";
+              json2.type = "number";
             if (values.every((v) => typeof v === "string"))
-              json.type = "string";
-            json.enum = values;
+              json2.type = "string";
+            json2.enum = values;
             break;
           }
           case "literal": {
-            const json = _json;
+            const json2 = _json;
             const vals = [];
             for (const val of def.values) {
               if (val === void 0) {
@@ -14396,23 +14396,23 @@ var JSONSchemaGenerator = class {
             if (vals.length === 0) {
             } else if (vals.length === 1) {
               const val = vals[0];
-              json.type = val === null ? "null" : typeof val;
-              json.const = val;
+              json2.type = val === null ? "null" : typeof val;
+              json2.const = val;
             } else {
               if (vals.every((v) => typeof v === "number"))
-                json.type = "number";
+                json2.type = "number";
               if (vals.every((v) => typeof v === "string"))
-                json.type = "string";
+                json2.type = "string";
               if (vals.every((v) => typeof v === "boolean"))
-                json.type = "string";
+                json2.type = "string";
               if (vals.every((v) => v === null))
-                json.type = "null";
-              json.enum = vals;
+                json2.type = "null";
+              json2.enum = vals;
             }
             break;
           }
           case "file": {
-            const json = _json;
+            const json2 = _json;
             const file = {
               type: "string",
               format: "binary",
@@ -14426,15 +14426,15 @@ var JSONSchemaGenerator = class {
             if (mime) {
               if (mime.length === 1) {
                 file.contentMediaType = mime[0];
-                Object.assign(json, file);
+                Object.assign(json2, file);
               } else {
-                json.anyOf = mime.map((m) => {
+                json2.anyOf = mime.map((m) => {
                   const mFile = { ...file, contentMediaType: m };
                   return mFile;
                 });
               }
             } else {
-              Object.assign(json, file);
+              Object.assign(json2, file);
             }
             break;
           }
@@ -14455,8 +14455,8 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "success": {
-            const json = _json;
-            json.type = "boolean";
+            const json2 = _json;
+            json2.type = "boolean";
             break;
           }
           case "default": {
@@ -14491,12 +14491,12 @@ var JSONSchemaGenerator = class {
             break;
           }
           case "template_literal": {
-            const json = _json;
+            const json2 = _json;
             const pattern = schema._zod.pattern;
             if (!pattern)
               throw new Error("Pattern not found in template literal");
-            json.type = "string";
-            json.pattern = pattern.source;
+            json2.type = "string";
+            json2.pattern = pattern.source;
             break;
           }
           case "pipe": {
@@ -21301,8 +21301,8 @@ var StdioServerTransport = class {
   }
   send(message) {
     return new Promise((resolve) => {
-      const json = serializeMessage(message);
-      if (this._stdout.write(json)) {
+      const json2 = serializeMessage(message);
+      if (this._stdout.write(json2)) {
         resolve();
       } else {
         this._stdout.once("drain", resolve);
@@ -21334,7 +21334,7 @@ var MEDIA_DOWNLOAD_CONCURRENCY = 3;
 var MAX_AUDIO_RESPONSE_BYTES = 12 * 1024 * 1024;
 var ENABLE_EXPERIMENTAL_FLAGS = process.env.EACHLABS_ENABLE_EXPERIMENTAL_FLAGS === "1";
 var UPDATE_CHECK_URL = "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
-var SERVER_VERSION = "0.4.0";
+var SERVER_VERSION = "0.5.0";
 var PREDICTION_TERMINAL_STATUSES = [
   "success",
   "failed",
@@ -21350,15 +21350,17 @@ var WORKFLOW_TERMINAL_STATUSES = [
 
 // src/core/http.ts
 var EachlabsError = class extends Error {
-  constructor(message, status, payload, ambiguousWrite = false) {
+  constructor(message, status, payload, ambiguousWrite = false, requestMetadata) {
     super(message);
     this.status = status;
     this.payload = payload;
     this.ambiguousWrite = ambiguousWrite;
+    this.requestMetadata = requestMetadata;
   }
   status;
   payload;
   ambiguousWrite;
+  requestMetadata;
 };
 function requireApiKey() {
   if (!EACH_API_KEY) {
@@ -21385,15 +21387,29 @@ function retryDelayMs(attempt, retryAfter, random2 = Math.random) {
   if (retryAfter) {
     const seconds = Number(retryAfter);
     if (Number.isFinite(seconds) && seconds > 0) {
-      return Math.min(seconds * 1e3, 1e4);
+      return Math.min(seconds * 1e3, 6e4);
     }
     const dateMs = Date.parse(retryAfter);
     if (Number.isFinite(dateMs)) {
-      return Math.max(0, Math.min(dateMs - Date.now(), 1e4));
+      return Math.max(0, Math.min(dateMs - Date.now(), 6e4));
     }
   }
   const base = Math.min(2 ** attempt * 1e3, 1e4);
   return Math.min(Math.round(base * (0.75 + random2() * 0.5)), 1e4);
+}
+function responseMetadata(response, attempts, retryable) {
+  const retryAfter = response.headers.get("retry-after");
+  const retryAfterMs = retryAfter ? retryDelayMs(1, retryAfter, () => 0) : void 0;
+  const limit = response.headers.get("x-ratelimit-limit") ?? void 0;
+  const remaining = response.headers.get("x-ratelimit-remaining") ?? void 0;
+  const reset = response.headers.get("x-ratelimit-reset") ?? void 0;
+  return {
+    attempts,
+    retryable,
+    retryAfterSeconds: retryAfterMs === void 0 ? void 0 : retryAfterMs / 1e3,
+    requestId: response.headers.get("x-request-id") ?? response.headers.get("x-eachlabs-request-id") ?? void 0,
+    rateLimit: limit || remaining || reset ? { limit, remaining, reset } : void 0
+  };
 }
 function isRetrySafeMethod(method) {
   return ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
@@ -21465,7 +21481,11 @@ async function eachRequest(path2, options = {}) {
           ambiguousWrite ? `Request to ${url2.pathname} failed after dispatch. The write result is unknown; it was not retried automatically. Check execution history before retrying manually.` : `Request to ${url2.pathname} failed: ${error2 instanceof Error ? error2.message : String(error2)}`,
           void 0,
           void 0,
-          ambiguousWrite
+          ambiguousWrite,
+          {
+            attempts: attempt,
+            retryable: retrySafe
+          }
         );
       }
       await abortableSleep(retryDelayMs(attempt, null), signal);
@@ -21484,7 +21504,9 @@ async function eachRequest(path2, options = {}) {
       throw new EachlabsError(
         `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
         response.status,
-        payload
+        payload,
+        false,
+        responseMetadata(response, attempt, retryable)
       );
     }
     return payload;
@@ -23634,7 +23656,7 @@ var connectionPromise;
 async function createConnection() {
   const client = new Client({
     name: "eachlabs-docs-proxy",
-    version: "0.4.0"
+    version: "0.5.0"
   });
   const transport = new StreamableHTTPClientTransport(
     new URL(EACH_DOCS_MCP_URL)
@@ -23860,6 +23882,433 @@ async function synthesizeSpeech(payload, signal) {
   };
 }
 
+// src/core/schema.ts
+var import_ajv2 = __toESM(require_ajv(), 1);
+var AjvConstructor = import_ajv2.default;
+var ajv = new AjvConstructor({
+  allErrors: true,
+  strict: false,
+  validateFormats: false,
+  allowUnionTypes: true
+});
+var compiledSchemas = /* @__PURE__ */ new WeakMap();
+function checkJsonSchema(schema) {
+  if (!schema || typeof schema !== "object") {
+    return { valid: false, error: "Schema must be a JSON object." };
+  }
+  try {
+    ajv.compile(schema);
+    return { valid: true };
+  } catch (error2) {
+    return {
+      valid: false,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    };
+  }
+}
+function schemaRecord(value) {
+  return value && typeof value === "object" ? value : void 0;
+}
+function getRequestSchema(model) {
+  return model.request_schema ?? model.input_schema ?? model.schema ?? model.latest_version?.request_schema;
+}
+function schemaProperties(schema) {
+  const properties = schemaRecord(schema)?.properties;
+  return properties && typeof properties === "object" ? properties : {};
+}
+function schemaRequired(schema) {
+  const required2 = schemaRecord(schema)?.required;
+  return Array.isArray(required2) ? required2.filter((field) => typeof field === "string") : [];
+}
+function summarizeJsonSchema(schema) {
+  const candidate = schemaRecord(schema);
+  if (!candidate) return schema;
+  const properties = schemaProperties(schema);
+  const required2 = schemaRequired(schema);
+  if (Object.keys(properties).length === 0) return schema;
+  return {
+    type: candidate.type ?? "object",
+    required: required2,
+    fields: Object.entries(properties).map(([name, field]) => ({
+      name,
+      type: field.type ?? field.anyOf ?? field.oneOf ?? "unknown",
+      required: required2.includes(name),
+      description: field.description,
+      default: field.default,
+      enum: field.enum,
+      examples: field.examples ?? field.example,
+      minimum: field.minimum,
+      maximum: field.maximum,
+      minLength: field.minLength,
+      maxLength: field.maxLength,
+      pattern: field.pattern
+    }))
+  };
+}
+function exampleForSchema(schema, name = "value") {
+  if (Array.isArray(schema.examples) && schema.examples.length > 0) {
+    return schema.examples[0];
+  }
+  if ("example" in schema) return schema.example;
+  if ("default" in schema) return schema.default;
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
+  const alternatives = schema.oneOf ?? schema.anyOf;
+  if (Array.isArray(alternatives)) {
+    const first = alternatives.find((item) => item && typeof item === "object");
+    if (first) return exampleForSchema(first, name);
+  }
+  const type = schema.type;
+  const lowerName = name.toLowerCase();
+  const description = String(schema.description ?? "").toLowerCase();
+  if (type === "object" || schema.properties) {
+    const result = {};
+    const required2 = new Set(
+      Array.isArray(schema.required) ? schema.required.filter((item) => typeof item === "string") : []
+    );
+    for (const [key, child] of Object.entries(
+      schema.properties ?? {}
+    )) {
+      if (required2.has(key)) result[key] = exampleForSchema(child, key);
+    }
+    return result;
+  }
+  if (type === "array") {
+    const itemSchema = schemaRecord(schema.items);
+    const count = Math.max(0, Number(schema.minItems ?? 0));
+    return itemSchema ? Array.from({ length: count }, () => exampleForSchema(itemSchema, name)) : [];
+  }
+  if (type === "string" || !type) {
+    if (lowerName.includes("prompt")) {
+      return "A cinematic product photo of a futuristic sneaker on a clean studio background";
+    }
+    if (lowerName.includes("image") || lowerName.includes("url") || description.includes("url") || schema.format === "uri") {
+      return "https://example.com/input.png";
+    }
+    if (lowerName.includes("aspect") || lowerName.includes("ratio")) return "1:1";
+    const minLength = Number(schema.minLength ?? 0);
+    return `example_${name}`.padEnd(minLength, "x");
+  }
+  if (type === "integer") return Math.ceil(Number(schema.minimum ?? 1));
+  if (type === "number") return Number(schema.minimum ?? 1);
+  if (type === "boolean") return false;
+  if (type === "null") return null;
+  return null;
+}
+function generateExampleInput(schema, includeOptional, overrides) {
+  const properties = schemaProperties(schema);
+  const required2 = new Set(schemaRequired(schema));
+  const input = {};
+  for (const [name, field] of Object.entries(properties)) {
+    if (includeOptional || required2.has(name)) {
+      input[name] = exampleForSchema(field, name);
+    }
+  }
+  return { ...input, ...overrides };
+}
+function formatAjvError(error2) {
+  const missing = error2.keyword === "required" ? String(error2.params.missingProperty ?? "") : "";
+  const field = [error2.instancePath.replace(/^\//, "").replaceAll("/", "."), missing].filter(Boolean).join(".");
+  return {
+    field: field || "$",
+    message: error2.message ?? `Schema validation failed (${error2.keyword}).`,
+    expected: error2.params
+  };
+}
+function validateAgainstSchema(schema, input) {
+  if (!schema || typeof schema !== "object") {
+    return {
+      valid: true,
+      errors: [],
+      warnings: [{ field: "$", message: "No documented request schema is available." }]
+    };
+  }
+  let validate = compiledSchemas.get(schema);
+  try {
+    if (!validate) {
+      const compiled = ajv.compile(schema);
+      compiledSchemas.set(schema, compiled);
+      validate = compiled;
+    }
+  } catch (error2) {
+    return {
+      valid: true,
+      errors: [],
+      warnings: [
+        {
+          field: "$",
+          message: `The documented schema could not be compiled: ${error2 instanceof Error ? error2.message : String(error2)}`
+        }
+      ]
+    };
+  }
+  if (!validate) {
+    throw new Error("Schema validator was not initialized.");
+  }
+  const valid = Boolean(validate(input));
+  const properties = schemaProperties(schema);
+  const warnings = Object.keys(input).filter((field) => !properties[field]).map((field) => ({
+    field,
+    message: "Field is not present in the documented request schema."
+  }));
+  return {
+    valid,
+    errors: (validate.errors ?? []).map(formatAjvError),
+    warnings
+  };
+}
+
+// src/core/codegen.ts
+function json(value) {
+  return JSON.stringify(value, null, 2);
+}
+function tsType(schema) {
+  if (Array.isArray(schema.enum)) {
+    return schema.enum.map((item) => JSON.stringify(item)).join(" | ");
+  }
+  if (schema.type === "array") {
+    return `${tsType(schema.items ?? {})}[]`;
+  }
+  if (schema.type === "object" || schema.properties) {
+    const required2 = new Set(
+      Array.isArray(schema.required) ? schema.required : []
+    );
+    return `{ ${Object.entries(
+      schema.properties ?? {}
+    ).map(
+      ([name, child]) => `${JSON.stringify(name)}${required2.has(name) ? "" : "?"}: ${tsType(child)}`
+    ).join("; ")} }`;
+  }
+  if (schema.type === "integer" || schema.type === "number") return "number";
+  if (schema.type === "boolean") return "boolean";
+  if (schema.type === "null") return "null";
+  return "string";
+}
+function zodType(schema) {
+  if (Array.isArray(schema.enum) && schema.enum.every((item) => typeof item === "string")) {
+    return `z.enum([${schema.enum.map((item) => JSON.stringify(item)).join(", ")}])`;
+  }
+  let expression;
+  if (schema.type === "array") {
+    expression = `z.array(${zodType(schema.items ?? {})})`;
+  } else if (schema.type === "object" || schema.properties) {
+    const required2 = new Set(
+      Array.isArray(schema.required) ? schema.required : []
+    );
+    expression = `z.object({
+${Object.entries(
+      schema.properties ?? {}
+    ).map(([name, child]) => {
+      const childExpression = zodType(child);
+      return `  ${JSON.stringify(name)}: ${childExpression}${required2.has(name) ? "" : ".optional()"},`;
+    }).join("\n")}
+})`;
+  } else if (schema.type === "integer") {
+    expression = "z.number().int()";
+  } else if (schema.type === "number") {
+    expression = "z.number()";
+  } else if (schema.type === "boolean") {
+    expression = "z.boolean()";
+  } else {
+    expression = "z.string()";
+  }
+  if (typeof schema.minimum === "number") expression += `.min(${schema.minimum})`;
+  if (typeof schema.maximum === "number") expression += `.max(${schema.maximum})`;
+  if (typeof schema.minLength === "number") expression += `.min(${schema.minLength})`;
+  if (typeof schema.maxLength === "number") expression += `.max(${schema.maxLength})`;
+  return expression;
+}
+function typescriptWebhookHandler(framework) {
+  const verify = `import { timingSafeEqual } from "node:crypto";
+
+function validWebhookSecret(received: string | null, expected: string): boolean {
+  if (!received) return false;
+  const left = Buffer.from(received);
+  const right = Buffer.from(expected);
+  return left.length === right.length && timingSafeEqual(left, right);
+}`;
+  if (framework === "nextjs") {
+    return `${verify}
+
+export async function POST(request: Request) {
+  if (!validWebhookSecret(request.headers.get("x-webhook-secret"), process.env.EACH_WEBHOOK_SECRET!)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  const event = await request.json();
+  console.log(event);
+  return Response.json({ received: true });
+}`;
+  }
+  return `import express from "express";
+${verify}
+
+const app = express();
+
+// Express-compatible handler
+app.post("/webhooks/eachlabs", express.json(), (request, response) => {
+  if (!validWebhookSecret(request.get("x-webhook-secret") ?? null, process.env.EACH_WEBHOOK_SECRET!)) {
+    return response.sendStatus(401);
+  }
+  console.log(request.body);
+  response.json({ received: true });
+});
+
+app.listen(3000);`;
+}
+function pythonWebhookHandler(framework) {
+  if (framework === "flask") {
+    return `import hmac
+import os
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.post("/webhooks/eachlabs")
+def eachlabs_webhook():
+    received = request.headers.get("X-Webhook-Secret", "")
+    if not hmac.compare_digest(received, os.environ["EACH_WEBHOOK_SECRET"]):
+        return ("Unauthorized", 401)
+    print(request.get_json())
+    return jsonify(received=True)`;
+  }
+  return `import hmac
+import os
+from fastapi import FastAPI, Header, HTTPException, Request
+
+app = FastAPI()
+
+@app.post("/webhooks/eachlabs")
+async def eachlabs_webhook(request: Request, x_webhook_secret: str = Header(default="")):
+    if not hmac.compare_digest(x_webhook_secret, os.environ["EACH_WEBHOOK_SECRET"]):
+        raise HTTPException(status_code=401)
+    print(await request.json())
+    return {"received": True}`;
+}
+function generateTypescript(model, schema, example, mode, includeTypes, includeZod) {
+  const typeBlock = includeTypes ? `type ModelInput = ${tsType(schema)};
+` : "";
+  const zodBlock = includeZod ? `import { z } from "zod";
+
+const ModelInputSchema = ${zodType(schema)};
+` : "";
+  const endpoint = mode === "synchronous" ? "/v1/prediction/run" : "/v1/prediction";
+  const webhookFields = mode === "webhook" ? `,
+    webhook_url: process.env.EACH_WEBHOOK_URL,
+    webhook_secret: process.env.EACH_WEBHOOK_SECRET` : "";
+  const polling = mode === "async_polling" ? `
+const predictionId = created.predictionID;
+for (;;) {
+  const statusResponse = await fetch(\`\${API_BASE}/v1/prediction/\${predictionId}\`, { headers });
+  if (!statusResponse.ok) throw new Error(await statusResponse.text());
+  const prediction = await statusResponse.json();
+  if (["success", "failed", "error", "cancelled"].includes(prediction.status)) {
+    console.log(prediction);
+    break;
+  }
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+}` : `
+console.log(created);`;
+  return `${zodBlock}${typeBlock}
+const API_BASE = "https://api.eachlabs.ai";
+const headers = {
+  Authorization: \`Bearer \${process.env.EACH_API_KEY}\`,
+  "Content-Type": "application/json",
+};
+
+const input${includeTypes ? ": ModelInput" : ""} = ${json(example)};
+${includeZod ? "ModelInputSchema.parse(input);\n" : ""}
+const response = await fetch(\`\${API_BASE}${endpoint}\`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    model: ${JSON.stringify(model)},
+    input${webhookFields}
+  }),
+});
+if (!response.ok) throw new Error(await response.text());
+const created = await response.json();
+${polling}`.trim();
+}
+function generatePython(model, example, mode) {
+  const endpoint = mode === "synchronous" ? "/v1/prediction/run" : "/v1/prediction";
+  const webhookFields = mode === "webhook" ? `,
+    "webhook_url": os.environ["EACH_WEBHOOK_URL"],
+    "webhook_secret": os.environ["EACH_WEBHOOK_SECRET"]` : "";
+  const polling = mode === "async_polling" ? `
+prediction_id = created["predictionID"]
+while True:
+    prediction = requests.get(f"{API_BASE}/v1/prediction/{prediction_id}", headers=headers).json()
+    if prediction["status"] in ("success", "failed", "error", "cancelled"):
+        print(prediction)
+        break
+    time.sleep(3)` : "\nprint(created)";
+  return `import json
+import os
+import time
+import requests
+
+API_BASE = "https://api.eachlabs.ai"
+headers = {
+    "Authorization": f"Bearer {os.environ['EACH_API_KEY']}",
+    "Content-Type": "application/json",
+}
+input_data = json.loads(r'''${json(example)}''')
+payload = {
+    "model": ${JSON.stringify(model)},
+    "input": input_data${webhookFields}
+}
+response = requests.post(f"{API_BASE}${endpoint}", headers=headers, json=payload)
+response.raise_for_status()
+created = response.json()
+${polling}`.trim();
+}
+function generateCurl(model, example, mode) {
+  const endpoint = mode === "synchronous" ? "/v1/prediction/run" : "/v1/prediction";
+  const payload = { model, input: example };
+  if (mode === "webhook") {
+    payload.webhook_url = "https://your-app.example/webhooks/eachlabs";
+    payload.webhook_secret = "replace-with-a-shared-secret";
+  }
+  return `curl --fail-with-body -X POST "https://api.eachlabs.ai${endpoint}" \\
+  -H "Authorization: Bearer $EACH_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  --data '${JSON.stringify(payload, null, 2)}'`;
+}
+function generateIntegrationCode({
+  model,
+  schema,
+  language,
+  mode,
+  framework = "none",
+  includeTypes = true,
+  includeZod = false
+}) {
+  const example = generateExampleInput(schema, false, {});
+  const code = language === "typescript" ? generateTypescript(
+    model,
+    schema,
+    example,
+    mode,
+    includeTypes,
+    includeZod
+  ) : language === "python" ? generatePython(model, example, mode) : generateCurl(model, example, mode);
+  const webhookHandler = mode !== "webhook" || framework === "none" || language === "curl" ? void 0 : language === "typescript" ? typescriptWebhookHandler(framework) : pythonWebhookHandler(framework);
+  return {
+    model,
+    language,
+    mode,
+    framework,
+    required_fields: schemaRequired(schema),
+    available_fields: Object.keys(schemaProperties(schema)),
+    code,
+    webhook_handler: webhookHandler,
+    notes: [
+      "Generated from the current live model request schema.",
+      "The deprecated prediction version field is intentionally omitted.",
+      mode === "webhook" ? "X-Webhook-Secret carries the configured secret verbatim; compare it in constant time." : void 0
+    ].filter(Boolean)
+  };
+}
+
 // src/core/media.ts
 var IMAGE_MIME_BY_EXTENSION = {
   png: "image/png",
@@ -24017,164 +24466,672 @@ async function pollUntilDone(fetchCurrent, terminalStatuses, timeoutSeconds, pol
   return { completed: false, last };
 }
 
-// src/core/schema.ts
-var import_ajv2 = __toESM(require_ajv(), 1);
-var AjvConstructor = import_ajv2.default;
-var ajv = new AjvConstructor({
-  allErrors: true,
-  strict: false,
-  validateFormats: false,
-  allowUnionTypes: true
-});
-var compiledSchemas = /* @__PURE__ */ new WeakMap();
-function schemaRecord(value) {
-  return value && typeof value === "object" ? value : void 0;
+// src/core/streaming.ts
+var CONNECTION_RETRY_STATUSES = /* @__PURE__ */ new Set([429, 502, 503, 504]);
+var SAFE_RAW_EVENT_TYPES = /* @__PURE__ */ new Set([
+  "status",
+  "tool_call",
+  "message",
+  "progress",
+  "web_search_query",
+  "web_search_citations",
+  "complete",
+  "execution_started",
+  "execution_progress",
+  "execution_completed"
+]);
+var MAX_STREAM_TEXT_CHARS = 1e6;
+var MAX_EVENTS_PER_BUCKET = 100;
+function sseDataFromBlock(block) {
+  return block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n").trim();
 }
-function getRequestSchema(model) {
-  return model.request_schema ?? model.input_schema ?? model.schema ?? model.latest_version?.request_schema;
-}
-function schemaProperties(schema) {
-  const properties = schemaRecord(schema)?.properties;
-  return properties && typeof properties === "object" ? properties : {};
-}
-function schemaRequired(schema) {
-  const required2 = schemaRecord(schema)?.required;
-  return Array.isArray(required2) ? required2.filter((field) => typeof field === "string") : [];
-}
-function summarizeJsonSchema(schema) {
-  const candidate = schemaRecord(schema);
-  if (!candidate) return schema;
-  const properties = schemaProperties(schema);
-  const required2 = schemaRequired(schema);
-  if (Object.keys(properties).length === 0) return schema;
+function normalizeSenseEvent(event, buckets) {
+  const record2 = event && typeof event === "object" ? event : { value: event };
+  const delta = record2?.choices?.[0]?.delta;
+  const extension = record2?.eachlabs ?? record2?.choices?.[0]?.delta?.eachlabs ?? record2;
+  const type = String(extension?.type ?? record2?.type ?? "");
+  const lowered = type.toLowerCase();
+  if (lowered.includes("thinking") || lowered.includes("reasoning")) {
+    return { type, suppressed: true };
+  }
+  const push = (target, value) => {
+    if (target.length < MAX_EVENTS_PER_BUCKET) target.push(value);
+  };
+  if (type === "generation_response") {
+    push(buckets.generations, extension);
+  } else if (type === "clarification_needed") {
+    push(buckets.clarification, extension);
+  } else if (type.startsWith("workflow_") || type.startsWith("execution_")) {
+    push(buckets.workflow, extension);
+  } else if (type === "error") {
+    push(buckets.errors, extension);
+  } else if (buckets.raw_safe_events && SAFE_RAW_EVENT_TYPES.has(type)) {
+    push(buckets.raw_safe_events, extension);
+  }
   return {
-    type: candidate.type ?? "object",
-    required: required2,
-    fields: Object.entries(properties).map(([name, field]) => ({
-      name,
-      type: field.type ?? field.anyOf ?? field.oneOf ?? "unknown",
-      required: required2.includes(name),
-      description: field.description,
-      default: field.default,
-      enum: field.enum,
-      examples: field.examples ?? field.example,
-      minimum: field.minimum,
-      maximum: field.maximum,
-      minLength: field.minLength,
-      maxLength: field.maxLength,
-      pattern: field.pattern
-    }))
+    type,
+    textDelta: typeof delta?.content === "string" ? delta.content : type === "text_response" && typeof extension?.content === "string" ? extension.content : void 0,
+    suppressed: false
   };
 }
-function exampleForSchema(schema, name = "value") {
-  if (Array.isArray(schema.examples) && schema.examples.length > 0) {
-    return schema.examples[0];
-  }
-  if ("example" in schema) return schema.example;
-  if ("default" in schema) return schema.default;
-  if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
-  const alternatives = schema.oneOf ?? schema.anyOf;
-  if (Array.isArray(alternatives)) {
-    const first = alternatives.find((item) => item && typeof item === "object");
-    if (first) return exampleForSchema(first, name);
-  }
-  const type = schema.type;
-  const lowerName = name.toLowerCase();
-  const description = String(schema.description ?? "").toLowerCase();
-  if (type === "object" || schema.properties) {
-    const result = {};
-    const required2 = new Set(
-      Array.isArray(schema.required) ? schema.required.filter((item) => typeof item === "string") : []
+async function responsePayload(response) {
+  const type = response.headers.get("content-type") ?? "";
+  return type.includes("application/json") ? response.json() : response.text();
+}
+async function streamEachSense(path2, {
+  baseUrl,
+  body,
+  timeoutSeconds = 900,
+  includeRawSafeEvents = false,
+  connectionRetries = 2,
+  apiKey
+}, extra) {
+  const url2 = new URL(joinUrl(baseUrl, path2));
+  const headers = new Headers({
+    Authorization: `Bearer ${apiKey ?? requireApiKey()}`,
+    "Content-Type": "application/json",
+    Accept: "text/event-stream, application/json"
+  });
+  let response;
+  let activityController;
+  let activityTimer;
+  let attempts = 0;
+  const armTimer = (milliseconds, message) => {
+    if (activityTimer) clearTimeout(activityTimer);
+    activityTimer = setTimeout(
+      () => activityController?.abort(new Error(message)),
+      milliseconds
     );
-    for (const [key, child] of Object.entries(
-      schema.properties ?? {}
-    )) {
-      if (required2.has(key)) result[key] = exampleForSchema(child, key);
-    }
-    return result;
-  }
-  if (type === "array") {
-    const itemSchema = schemaRecord(schema.items);
-    const count = Math.max(0, Number(schema.minItems ?? 0));
-    return itemSchema ? Array.from({ length: count }, () => exampleForSchema(itemSchema, name)) : [];
-  }
-  if (type === "string" || !type) {
-    if (lowerName.includes("prompt")) {
-      return "A cinematic product photo of a futuristic sneaker on a clean studio background";
-    }
-    if (lowerName.includes("image") || lowerName.includes("url") || description.includes("url") || schema.format === "uri") {
-      return "https://example.com/input.png";
-    }
-    if (lowerName.includes("aspect") || lowerName.includes("ratio")) return "1:1";
-    const minLength = Number(schema.minLength ?? 0);
-    return `example_${name}`.padEnd(minLength, "x");
-  }
-  if (type === "integer") return Math.ceil(Number(schema.minimum ?? 1));
-  if (type === "number") return Number(schema.minimum ?? 1);
-  if (type === "boolean") return false;
-  if (type === "null") return null;
-  return null;
-}
-function generateExampleInput(schema, includeOptional, overrides) {
-  const properties = schemaProperties(schema);
-  const required2 = new Set(schemaRequired(schema));
-  const input = {};
-  for (const [name, field] of Object.entries(properties)) {
-    if (includeOptional || required2.has(name)) {
-      input[name] = exampleForSchema(field, name);
-    }
-  }
-  return { ...input, ...overrides };
-}
-function formatAjvError(error2) {
-  const missing = error2.keyword === "required" ? String(error2.params.missingProperty ?? "") : "";
-  const field = [error2.instancePath.replace(/^\//, "").replaceAll("/", "."), missing].filter(Boolean).join(".");
-  return {
-    field: field || "$",
-    message: error2.message ?? `Schema validation failed (${error2.keyword}).`,
-    expected: error2.params
   };
-}
-function validateAgainstSchema(schema, input) {
-  if (!schema || typeof schema !== "object") {
-    return {
-      valid: true,
-      errors: [],
-      warnings: [{ field: "$", message: "No documented request schema is available." }]
-    };
+  while (!response) {
+    attempts++;
+    activityController = new AbortController();
+    armTimer(3e4, "Upstream streaming connection timed out.");
+    const signal = extra?.signal ? AbortSignal.any([extra.signal, activityController.signal]) : activityController.signal;
+    try {
+      response = await fetch(url2, {
+        method: "POST",
+        headers,
+        body,
+        signal
+      });
+    } catch (error2) {
+      if (activityTimer) clearTimeout(activityTimer);
+      throw new EachlabsError(
+        `Streaming request to ${url2.pathname} failed after dispatch. The result is unknown and the POST was not retried: ${error2 instanceof Error ? error2.message : String(error2)}`,
+        void 0,
+        void 0,
+        true,
+        { attempts, retryable: false }
+      );
+    }
+    if (!response.ok && CONNECTION_RETRY_STATUSES.has(response.status)) {
+      const retryable = attempts <= connectionRetries;
+      if (!retryable) break;
+      const retryAfter = response.headers.get("retry-after");
+      await response.body?.cancel().catch(() => void 0);
+      if (activityTimer) clearTimeout(activityTimer);
+      await abortableSleep(retryDelayMs(attempts, retryAfter), extra?.signal);
+      response = void 0;
+    }
   }
-  let validate = compiledSchemas.get(schema);
+  if (activityTimer) clearTimeout(activityTimer);
+  if (!response) {
+    throw new EachlabsError("Streaming request did not return a response.");
+  }
+  const contentType2 = response.headers.get("content-type") ?? "";
+  if (!response.ok) {
+    const retryable = CONNECTION_RETRY_STATUSES.has(response.status);
+    throw new EachlabsError(
+      `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
+      response.status,
+      await responsePayload(response),
+      false,
+      responseMetadata(response, attempts, retryable)
+    );
+  }
+  if (!contentType2.includes("text/event-stream") || !response.body) {
+    return contentType2.includes("application/json") ? response.json() : response.text();
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const result = {
+    streamed: true,
+    generations: [],
+    clarification: [],
+    workflow: [],
+    errors: [],
+    raw_safe_events: includeRawSafeEvents ? [] : void 0,
+    event_count: 0,
+    connection_attempts: attempts
+  };
+  let buffer = "";
+  let textOut = "";
+  let textTruncated = false;
+  const combinedSignal2 = extra?.signal ? AbortSignal.any([extra.signal, activityController.signal]) : activityController.signal;
+  const resetIdleTimer = () => armTimer(
+    timeoutSeconds * 1e3,
+    `Upstream stream was idle for ${timeoutSeconds} seconds.`
+  );
+  resetIdleTimer();
+  const handleData = async (data) => {
+    if (!data || data === "[DONE]") return;
+    let event;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      return;
+    }
+    result.event_count++;
+    const normalized = normalizeSenseEvent(event, result);
+    if (normalized.suppressed) return;
+    if (normalized.textDelta) {
+      const remaining = MAX_STREAM_TEXT_CHARS - textOut.length;
+      if (remaining > 0) {
+        textOut += normalized.textDelta.slice(0, remaining);
+      }
+      if (normalized.textDelta.length > remaining) textTruncated = true;
+    }
+    const progressToken = extra?._meta?.progressToken;
+    if (progressToken !== void 0 && extra?.sendNotification && normalized.type !== "text_response") {
+      await extra.sendNotification({
+        method: "notifications/progress",
+        params: {
+          progressToken,
+          progress: result.event_count,
+          message: normalized.type || "streaming"
+        }
+      }).catch(() => void 0);
+    }
+  };
   try {
-    if (!validate) {
-      const compiled = ajv.compile(schema);
-      compiledSchemas.set(schema, compiled);
-      validate = compiled;
+    while (true) {
+      if (combinedSignal2.aborted) {
+        await reader.cancel().catch(() => void 0);
+        result.cancelled = Boolean(extra?.signal?.aborted) || void 0;
+        break;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      resetIdleTimer();
+      buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+      let boundary;
+      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+        const data = sseDataFromBlock(buffer.slice(0, boundary));
+        buffer = buffer.slice(boundary + 2);
+        await handleData(data);
+      }
     }
   } catch (error2) {
+    if (!extra?.signal?.aborted) {
+      throw new EachlabsError(
+        `Streaming response from ${url2.pathname} failed after the stream started and was not retried: ${error2 instanceof Error ? error2.message : String(error2)}`,
+        void 0,
+        void 0,
+        true,
+        { attempts, retryable: false }
+      );
+    }
+  } finally {
+    if (activityTimer) clearTimeout(activityTimer);
+  }
+  buffer += decoder.decode();
+  await handleData(sseDataFromBlock(buffer));
+  result.text = textOut || void 0;
+  result.text_truncated = textTruncated || void 0;
+  if (!includeRawSafeEvents) delete result.raw_safe_events;
+  return result;
+}
+
+// src/core/workflow-validator.ts
+var STEP_TYPES = /* @__PURE__ */ new Set([
+  "model",
+  "http",
+  "python",
+  "parallel",
+  "choice",
+  "pass"
+]);
+var CHOICE_OPERATORS = /* @__PURE__ */ new Set([
+  "equals",
+  "not_equals",
+  "greater_than",
+  "greater_than_or_equal",
+  "less_than",
+  "less_than_or_equal",
+  "string_contains",
+  "string_starts_with",
+  "string_ends_with",
+  "string_matches",
+  "array_contains",
+  "array_length_equals",
+  "is_null",
+  "is_not_null",
+  "in",
+  "not_in"
+]);
+var TEMPLATE_REFERENCE = /\{\{\s*([a-zA-Z0-9_-]+)(?:\.([^}]+))?\s*\}\}/g;
+var CONDITION_REFERENCE = /^\$\.([a-zA-Z0-9_-]+)(?:\.|$)/;
+var SECRET_FIELD = /(api[_-]?key|secret|token|password|authorization)/i;
+function objectRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function stepId(step) {
+  return String(step.step_id ?? step.id ?? "");
+}
+function collectTemplateReferences(value, output = []) {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(TEMPLATE_REFERENCE)) {
+      output.push({ root: match[1], tail: match[2]?.trim() });
+    }
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectTemplateReferences(item, output);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      collectTemplateReferences(item, output);
+    }
+  }
+  return output;
+}
+function nestedStepArrays(step) {
+  const result = [];
+  const add = (candidate, path2) => {
+    if (Array.isArray(candidate)) result.push({ steps: candidate, path: path2 });
+    else if (Array.isArray(objectRecord(candidate)?.steps)) {
+      result.push({ steps: objectRecord(candidate).steps, path: `${path2}.steps` });
+    }
+  };
+  if (Array.isArray(step.branches)) {
+    step.branches.forEach(
+      (branch, index) => add(branch, `.branches[${index}]`)
+    );
+  }
+  add(step.condition_met_branch, ".condition_met_branch");
+  add(step.default_branch, ".default_branch");
+  if (Array.isArray(step.choices)) {
+    step.choices.forEach(
+      (choice, index) => add(choice, `.choices[${index}]`)
+    );
+  }
+  return result;
+}
+function inspectCondition(condition, available, inputFields, path2, diagnostics) {
+  const record2 = objectRecord(condition);
+  if (!record2) {
+    diagnostics.push({
+      severity: "error",
+      code: "choice_condition_missing",
+      path: path2,
+      message: "Choice steps require a condition object."
+    });
+    return;
+  }
+  for (const logical of ["and", "or"]) {
+    if (Array.isArray(record2[logical])) {
+      record2[logical].forEach(
+        (item, index) => inspectCondition(item, available, inputFields, `${path2}.${logical}[${index}]`, diagnostics)
+      );
+      return;
+    }
+  }
+  if (record2.not) {
+    inspectCondition(record2.not, available, inputFields, `${path2}.not`, diagnostics);
+    return;
+  }
+  if (!CHOICE_OPERATORS.has(String(record2.operator ?? ""))) {
+    diagnostics.push({
+      severity: "warning",
+      code: "choice_operator_unknown",
+      path: `${path2}.operator`,
+      message: `Operator '${String(record2.operator ?? "")}' is not in the documented operator set.`
+    });
+  }
+  const match = String(record2.expression ?? "").match(CONDITION_REFERENCE);
+  if (!match) {
+    diagnostics.push({
+      severity: "error",
+      code: "choice_expression_invalid",
+      path: `${path2}.expression`,
+      message: "Choice expressions must use $.inputs.field or $.step_id.field syntax."
+    });
+  } else if (match[1] === "inputs") {
+    const field = String(record2.expression ?? "").split(".")[2];
+    if (inputFields.size > 0 && field && !inputFields.has(field)) {
+      diagnostics.push({
+        severity: "error",
+        code: "input_reference_unknown",
+        path: `${path2}.expression`,
+        message: `Choice expression references undefined workflow input '${field}'.`
+      });
+    }
+  } else if (!available.has(match[1])) {
+    diagnostics.push({
+      severity: "error",
+      code: "reference_unavailable",
+      path: `${path2}.expression`,
+      message: `Choice expression references unavailable step '${match[1]}'.`
+    });
+  }
+}
+function inspectPolicy(value, path2, diagnostics) {
+  if (Array.isArray(value)) {
+    value.forEach(
+      (item, index) => inspectPolicy(item, `${path2}[${index}]`, diagnostics)
+    );
+    return;
+  }
+  const record2 = objectRecord(value);
+  if (!record2) return;
+  for (const [key, item] of Object.entries(record2)) {
+    const itemPath = `${path2}.${key}`;
+    if (SECRET_FIELD.test(key) && typeof item === "string" && item.length > 0) {
+      diagnostics.push({
+        severity: "warning",
+        code: "inline_secret",
+        path: itemPath,
+        message: "Possible inline secret; use runtime configuration instead."
+      });
+    }
+    if ((key === "url" || key === "endpoint") && typeof item === "string" && item.startsWith("http://")) {
+      diagnostics.push({
+        severity: "warning",
+        code: "insecure_http",
+        path: itemPath,
+        message: "Plain HTTP endpoint detected; prefer HTTPS."
+      });
+    }
+    inspectPolicy(item, itemPath, diagnostics);
+  }
+}
+async function validateWorkflowDefinition(definition, {
+  expectedVersion,
+  modelResolver,
+  policyChecks = false
+} = {}) {
+  const diagnostics = [];
+  const workflow = objectRecord(definition);
+  if (!workflow) {
     return {
-      valid: true,
-      errors: [],
-      warnings: [
+      valid: false,
+      diagnostics: [
         {
-          field: "$",
-          message: `The documented schema could not be compiled: ${error2 instanceof Error ? error2.message : String(error2)}`
+          severity: "error",
+          code: "definition_invalid",
+          path: "$",
+          message: "Workflow definition must be a JSON object."
         }
-      ]
+      ],
+      stats: { steps: 0, models: 0 }
     };
   }
-  if (!validate) {
-    throw new Error("Schema validator was not initialized.");
+  if (expectedVersion && workflow.version !== void 0 && String(workflow.version) !== expectedVersion) {
+    diagnostics.push({
+      severity: "error",
+      code: "version_mismatch",
+      path: "$.version",
+      message: `Definition version '${String(workflow.version)}' must match '${expectedVersion}'.`
+    });
   }
-  const valid = Boolean(validate(input));
-  const properties = schemaProperties(schema);
-  const warnings = Object.keys(input).filter((field) => !properties[field]).map((field) => ({
-    field,
-    message: "Field is not present in the documented request schema."
-  }));
+  if (workflow.input_schema !== void 0) {
+    const schemaCheck = checkJsonSchema(workflow.input_schema);
+    if (!schemaCheck.valid) {
+      diagnostics.push({
+        severity: "error",
+        code: "input_schema_invalid",
+        path: "$.input_schema",
+        message: schemaCheck.error ?? "Invalid JSON Schema."
+      });
+    }
+  }
+  const rootSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
+  const inputFields = new Set(
+    Object.keys(objectRecord(objectRecord(workflow.input_schema)?.properties) ?? {})
+  );
+  if (!Array.isArray(workflow.steps)) {
+    diagnostics.push({
+      severity: "error",
+      code: "steps_missing",
+      path: "$.steps",
+      message: "Workflow definition requires a steps array."
+    });
+  }
+  const allIds = /* @__PURE__ */ new Set();
+  const modelSteps = [];
+  let stepCount = 0;
+  const walk = (rawSteps, inherited, basePath) => {
+    const available = new Set(inherited);
+    rawSteps.forEach((rawStep, index) => {
+      const path2 = `${basePath}[${index}]`;
+      const step = objectRecord(rawStep);
+      if (!step) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_invalid",
+          path: path2,
+          message: "Step must be a JSON object."
+        });
+        return;
+      }
+      stepCount++;
+      const id = stepId(step);
+      if (!id) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_id_missing",
+          path: path2,
+          message: "Step requires id or step_id."
+        });
+      } else if (allIds.has(id)) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_id_duplicate",
+          path: path2,
+          message: `Step ID '${id}' is duplicated.`
+        });
+      } else {
+        allIds.add(id);
+      }
+      const type = String(step.type ?? "");
+      if (!STEP_TYPES.has(type)) {
+        diagnostics.push({
+          severity: "error",
+          code: "step_type_unsupported",
+          path: `${path2}.type`,
+          message: `Unsupported step type '${type}'.`
+        });
+      }
+      const directStep = { ...step };
+      delete directStep.branches;
+      delete directStep.condition_met_branch;
+      delete directStep.default_branch;
+      delete directStep.choices;
+      for (const reference of collectTemplateReferences(directStep)) {
+        if (reference.root === "inputs") {
+          const field = reference.tail?.split(".")[0];
+          if (inputFields.size > 0 && field && !inputFields.has(field)) {
+            diagnostics.push({
+              severity: "error",
+              code: "input_reference_unknown",
+              path: path2,
+              message: `Template references undefined workflow input '${field}'.`
+            });
+          }
+        } else if (!available.has(reference.root)) {
+          diagnostics.push({
+            severity: "error",
+            code: "reference_unavailable",
+            path: path2,
+            message: `Template references unavailable or later step '${reference.root}'.`
+          });
+        }
+      }
+      if (type === "choice") {
+        inspectCondition(
+          step.condition,
+          available,
+          inputFields,
+          `${path2}.condition`,
+          diagnostics
+        );
+        for (const branchName of [
+          "condition_met_branch",
+          "default_branch"
+        ]) {
+          const branch = objectRecord(step[branchName]);
+          if (!branch || !Array.isArray(branch.steps)) {
+            diagnostics.push({
+              severity: "error",
+              code: "choice_branch_invalid",
+              path: `${path2}.${branchName}`,
+              message: `${branchName} must be an object containing a steps array.`
+            });
+          }
+        }
+      }
+      if (type === "parallel") {
+        if (!Array.isArray(step.branches) || step.branches.length < 1 || step.branches.length > 40) {
+          diagnostics.push({
+            severity: "error",
+            code: "parallel_branches_invalid",
+            path: `${path2}.branches`,
+            message: "Parallel steps require between 1 and 40 branches."
+          });
+        } else {
+          step.branches.forEach((branch, branchIndex) => {
+            if (!Array.isArray(objectRecord(branch)?.steps)) {
+              diagnostics.push({
+                severity: "error",
+                code: "parallel_branch_invalid",
+                path: `${path2}.branches[${branchIndex}]`,
+                message: "Each parallel branch must contain a steps array."
+              });
+            }
+          });
+        }
+      }
+      if (type === "model") {
+        const model = String(step.model ?? "");
+        if (!model) {
+          diagnostics.push({
+            severity: "error",
+            code: "model_missing",
+            path: `${path2}.model`,
+            message: "Model step requires a model slug."
+          });
+        } else {
+          modelSteps.push({
+            model,
+            params: objectRecord(step.params) ?? {},
+            path: path2
+          });
+        }
+        const fallback = objectRecord(step.fallback);
+        const fallbackModel = String(fallback?.model ?? "");
+        if (fallback?.enabled && fallbackModel) {
+          modelSteps.push({
+            model: fallbackModel,
+            params: objectRecord(fallback.params) ?? {},
+            path: `${path2}.fallback`
+          });
+        }
+      }
+      const retry = objectRecord(step.retry);
+      if (retry?.max_attempts !== void 0) {
+        const attempts = Number(retry.max_attempts);
+        if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) {
+          diagnostics.push({
+            severity: "error",
+            code: "retry_bounds",
+            path: `${path2}.retry.max_attempts`,
+            message: "max_attempts must be an integer from 1 to 10."
+          });
+        }
+      }
+      const timeout = step.timeout_seconds ?? step.timeout;
+      if (timeout !== void 0 && (Number(timeout) < 1 || Number(timeout) > 900)) {
+        diagnostics.push({
+          severity: "error",
+          code: "timeout_bounds",
+          path: `${path2}.timeout_seconds`,
+          message: "Step timeout must be between 1 and 900 seconds."
+        });
+      }
+      for (const nested of nestedStepArrays(step)) {
+        const nestedAvailable = walk(
+          nested.steps,
+          available,
+          `${path2}${nested.path}`
+        );
+        if (type === "parallel") {
+          for (const nestedId of nestedAvailable) available.add(nestedId);
+        }
+      }
+      if (id) available.add(id);
+    });
+    return available;
+  };
+  walk(rootSteps, /* @__PURE__ */ new Set(), "$.steps");
+  if (modelResolver) {
+    const cache = /* @__PURE__ */ new Map();
+    const resolve = (slug) => {
+      const existing = cache.get(slug);
+      if (existing) return existing;
+      const request = modelResolver(slug);
+      cache.set(slug, request);
+      return request;
+    };
+    await Promise.all(
+      modelSteps.map(async ({ model, params, path: path2 }) => {
+        try {
+          const details = await resolve(model);
+          const schema = getRequestSchema(details);
+          if (!schema) {
+            diagnostics.push({
+              severity: "warning",
+              code: "model_schema_missing",
+              path: `${path2}.model`,
+              message: `Model '${model}' exists but has no documented request schema.`
+            });
+            return;
+          }
+          const validation = validateAgainstSchema(schema, params);
+          for (const error2 of validation.errors) {
+            diagnostics.push({
+              severity: "error",
+              code: "model_params_invalid",
+              path: `${path2}.params.${error2.field}`,
+              message: error2.message
+            });
+          }
+          for (const warning of validation.warnings) {
+            diagnostics.push({
+              severity: "warning",
+              code: "model_params_unknown",
+              path: `${path2}.params.${warning.field}`,
+              message: warning.message
+            });
+          }
+        } catch (error2) {
+          diagnostics.push({
+            severity: "error",
+            code: "model_not_found",
+            path: `${path2}.model`,
+            message: `Could not resolve model '${model}': ${error2 instanceof Error ? error2.message : String(error2)}`
+          });
+        }
+      })
+    );
+  }
+  if (policyChecks) inspectPolicy(workflow, "$", diagnostics);
   return {
-    valid,
-    errors: (validate.errors ?? []).map(formatAjvError),
-    warnings
+    valid: !diagnostics.some((item) => item.severity === "error"),
+    diagnostics,
+    stats: {
+      steps: stepCount,
+      models: new Set(modelSteps.map((item) => item.model)).size,
+      errors: diagnostics.filter((item) => item.severity === "error").length,
+      warnings: diagnostics.filter((item) => item.severity === "warning").length
+    }
   };
 }
 
@@ -24345,138 +25302,6 @@ async function predictionToolResult(value, prediction, includeMedia, embedImages
   const media = await mediaContentBlocks(prediction.output, embedImages);
   return media.length > 0 ? { content: [...base.content, ...media] } : base;
 }
-async function eachRequestStreaming(path2, options, extra) {
-  const url2 = new URL(joinUrl(options.baseUrl, path2));
-  const headers = new Headers({
-    Authorization: `Bearer ${requireApiKey()}`,
-    "Content-Type": "application/json",
-    Accept: "text/event-stream, application/json"
-  });
-  const idleController = new AbortController();
-  const idleTimeoutMs = options.idleTimeoutMs ?? 3e5;
-  let idleTimer = setTimeout(
-    () => idleController.abort(new Error("Upstream stream was idle for too long.")),
-    idleTimeoutMs
-  );
-  const resetIdleTimer = () => {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(
-      () => idleController.abort(new Error("Upstream stream was idle for too long.")),
-      idleTimeoutMs
-    );
-  };
-  const signal = extra?.signal ? AbortSignal.any([extra.signal, idleController.signal]) : idleController.signal;
-  let response;
-  try {
-    response = await fetch(url2, {
-      method: "POST",
-      headers,
-      body: options.body,
-      signal
-    });
-  } catch (error2) {
-    clearTimeout(idleTimer);
-    throw new EachlabsError(
-      `Streaming request to ${url2.pathname} failed: ${error2 instanceof Error ? error2.message : String(error2)}`
-    );
-  }
-  const contentType2 = response.headers.get("content-type") ?? "";
-  if (!response.ok) {
-    clearTimeout(idleTimer);
-    const payload = contentType2.includes("application/json") ? await response.json() : await response.text();
-    throw new EachlabsError(
-      `Eachlabs API returned HTTP ${response.status} for ${url2.pathname}`,
-      response.status,
-      payload
-    );
-  }
-  if (!contentType2.includes("text/event-stream") || !response.body) {
-    clearTimeout(idleTimer);
-    return contentType2.includes("application/json") ? response.json() : response.text();
-  }
-  const progressToken = extra?._meta?.progressToken;
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let textOut = "";
-  let textTruncated = false;
-  let eventCount = 0;
-  const events = [];
-  const MAX_STREAM_TEXT_CHARS = 1e6;
-  const handleData = async (data) => {
-    if (data === "[DONE]") return;
-    let event;
-    try {
-      event = JSON.parse(data);
-    } catch {
-      events.push(data);
-      return;
-    }
-    eventCount++;
-    const record2 = event;
-    const delta = record2?.choices?.[0]?.delta;
-    if (typeof delta?.content === "string") {
-      const remaining = MAX_STREAM_TEXT_CHARS - textOut.length;
-      if (remaining > 0) textOut += delta.content.slice(0, remaining);
-      if (delta.content.length > remaining) textTruncated = true;
-    }
-    const extension = record2?.eachlabs ?? record2?.choices?.[0]?.delta?.eachlabs;
-    const extensionType = String(extension?.type ?? record2?.type ?? "");
-    const isDeltaChunk = typeof delta?.content === "string" || extensionType.includes("delta");
-    if (!isDeltaChunk && events.length < 100) {
-      events.push(extension ?? event);
-    }
-    if (progressToken !== void 0 && extra?.sendNotification && !isDeltaChunk) {
-      await extra.sendNotification({
-        method: "notifications/progress",
-        params: {
-          progressToken,
-          progress: eventCount,
-          message: extensionType || "streaming"
-        }
-      }).catch(() => void 0);
-    }
-  };
-  while (true) {
-    if (extra?.signal?.aborted) {
-      await reader.cancel().catch(() => void 0);
-      break;
-    }
-    let chunk;
-    try {
-      chunk = await reader.read();
-    } catch (error2) {
-      if (extra?.signal?.aborted) break;
-      clearTimeout(idleTimer);
-      throw new EachlabsError(
-        `Streaming response from ${url2.pathname} failed: ${error2 instanceof Error ? error2.message : String(error2)}`
-      );
-    }
-    const { done, value } = chunk;
-    if (done) break;
-    resetIdleTimer();
-    buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
-    let boundary;
-    while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-      const eventBlock = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const data = eventBlock.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-      if (data) await handleData(data.trim());
-    }
-  }
-  buffer += decoder.decode();
-  const trailingData = buffer.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n").trim();
-  if (trailingData) await handleData(trailingData);
-  clearTimeout(idleTimer);
-  return {
-    streamed: true,
-    cancelled: Boolean(extra?.signal?.aborted) || void 0,
-    text: textOut || void 0,
-    text_truncated: textTruncated || void 0,
-    events,
-    event_count: eventCount
-  };
-}
 var server = new McpServer(
   {
     name: "eachlabs-mcp",
@@ -24514,7 +25339,8 @@ function registerTool(name, config2, inputSchema, handler) {
             error: error2.message,
             status: error2.status ?? null,
             upstream: error2.payload ?? null,
-            ambiguous_write: error2.ambiguousWrite || void 0
+            ambiguous_write: error2.ambiguousWrite || void 0,
+            request: error2.requestMetadata
           });
         }
         return errorText({
@@ -24739,6 +25565,56 @@ registerTool(
   }
 );
 registerTool(
+  "eachlabs_generate_integration_code",
+  {
+    title: "Generate model integration code",
+    description: "Generate deterministic TypeScript, Python, or cURL integration code from the model's current live request schema. Static model/version tables are never used.",
+    annotations: { ...readOnly }
+  },
+  {
+    model: external_exports.string().min(1).describe("Live EachLabs model slug."),
+    language: external_exports.enum(["typescript", "python", "curl"]),
+    mode: external_exports.enum(["async_polling", "webhook", "synchronous"]).default("async_polling"),
+    framework: external_exports.enum(["none", "express", "nextjs", "fastapi", "flask"]).default("none").describe("Optional webhook-handler framework."),
+    include_types: external_exports.boolean().default(true),
+    include_zod: external_exports.boolean().default(false).describe("TypeScript only. Generate a Zod input validator.")
+  },
+  async ({ model, language, mode, framework, include_types, include_zod }) => {
+    const validFramework = framework === "none" || language === "typescript" && ["express", "nextjs"].includes(framework) || language === "python" && ["fastapi", "flask"].includes(framework);
+    if (!validFramework) {
+      return errorText({
+        generated: false,
+        error: `Framework '${framework}' is not compatible with language '${language}'.`
+      });
+    }
+    if (framework !== "none" && mode !== "webhook") {
+      return errorText({
+        generated: false,
+        error: "A framework handler is only generated in webhook mode."
+      });
+    }
+    const details = await getModelBySlug(model);
+    const schema = getRequestSchema(details);
+    if (!schema || typeof schema !== "object") {
+      return errorText({
+        generated: false,
+        error: `Model '${model}' has no live request schema.`
+      });
+    }
+    return text(
+      generateIntegrationCode({
+        model,
+        schema,
+        language,
+        mode,
+        framework,
+        includeTypes: include_types,
+        includeZod: include_zod
+      })
+    );
+  }
+);
+registerTool(
   "eachlabs_create_prediction",
   {
     title: "Create prediction",
@@ -24753,7 +25629,9 @@ registerTool(
     mode: external_exports.enum(["async", "wait", "sync"]).default("async"),
     validate_input: external_exports.boolean().default(true).describe("Validate input against the model request_schema before creating. Skipped if no schema is documented."),
     webhook_url: external_exports.string().url().optional(),
-    webhook_secret: external_exports.string().optional().describe("HMAC-SHA256 secret used to sign webhook deliveries."),
+    webhook_secret: external_exports.string().optional().describe(
+      "Shared secret delivered verbatim in X-Webhook-Secret. Verify it with a constant-time string comparison; it is not an HMAC body signature."
+    ),
     timeout_seconds: external_exports.number().int().min(1).max(1800).default(300).describe("Only used for mode 'wait' and 'sync'."),
     poll_interval_seconds: external_exports.number().min(0.5).max(30).default(3).describe("Only used for mode 'wait'."),
     include_media: external_exports.boolean().default(true).describe("Attach successful outputs as media content blocks (inline images, links for video/audio)."),
@@ -25200,6 +26078,27 @@ if (ENABLE_EXPERIMENTAL_FLAGS) {
   );
 }
 registerTool(
+  "eachlabs_validate_workflow_definition",
+  {
+    title: "Validate workflow definition",
+    description: "Lint a workflow definition before mutation. Checks step IDs/types, JSON Schema, references, branches, choices, version consistency, retry/timeout bounds, and optionally live model schemas.",
+    annotations: { ...readOnly }
+  },
+  {
+    definition: jsonObjectSchema,
+    expected_version: external_exports.string().min(1).optional(),
+    mode: external_exports.enum(["structural", "live"]).default("live").describe("Live mode also resolves every model and validates its params against the current request schema."),
+    policy_checks: external_exports.boolean().default(false).describe("Optional static warnings for inline secrets and plain-HTTP endpoints; no external security scan is run.")
+  },
+  async ({ definition, expected_version, mode, policy_checks }) => text(
+    await validateWorkflowDefinition(definition, {
+      expectedVersion: expected_version,
+      modelResolver: mode === "live" ? getModelBySlug : void 0,
+      policyChecks: policy_checks
+    })
+  )
+);
+registerTool(
   "eachlabs_list_workflow_categories",
   {
     title: "List workflow categories",
@@ -25218,15 +26117,46 @@ registerTool(
   },
   {
     workflow: jsonObjectSchema.describe(
-      "CreateWorkflowRequest body from the each::workflows API, including name, description, categories, and definition."
-    )
+      "Current CreateWorkflowRequest body: name plus an optional definition. Other metadata fields are not accepted by the current route."
+    ),
+    validate_definition: external_exports.boolean().default(true),
+    validation_mode: external_exports.enum(["structural", "live"]).default("live"),
+    policy_checks: external_exports.boolean().default(false)
   },
-  async ({ workflow }) => text(
-    await eachRequest("/v1/workflows", {
-      method: "POST",
-      body: JSON.stringify(workflow)
-    })
-  )
+  async ({ workflow, validate_definition, validation_mode, policy_checks }) => {
+    const unsupportedFields = Object.keys(workflow).filter(
+      (field) => !["name", "definition"].includes(field)
+    );
+    if (typeof workflow.name !== "string" || !workflow.name.trim()) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation requires a non-empty name."
+      });
+    }
+    if (unsupportedFields.length > 0) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation accepts only name and definition.",
+        unsupported_fields: unsupportedFields
+      });
+    }
+    const definition = workflow.definition;
+    if (validate_definition && definition !== void 0) {
+      const validation = await validateWorkflowDefinition(definition, {
+        modelResolver: validation_mode === "live" ? getModelBySlug : void 0,
+        policyChecks: policy_checks
+      });
+      if (!validation.valid) {
+        return errorText({ created: false, validation });
+      }
+    }
+    return text(
+      await eachRequest("/v1/workflows", {
+        method: "POST",
+        body: JSON.stringify(workflow)
+      })
+    );
+  }
 );
 registerTool(
   "eachlabs_get_workflow",
@@ -25269,15 +26199,51 @@ registerTool(
   {
     workflow_id: external_exports.string().min(1),
     version_id: external_exports.string().min(1),
-    body: jsonObjectSchema.describe("UpsertVersionRequest body.")
+    body: jsonObjectSchema.describe("UpsertVersionRequest body."),
+    validate_definition: external_exports.boolean().default(true),
+    validation_mode: external_exports.enum(["structural", "live"]).default("live"),
+    policy_checks: external_exports.boolean().default(false)
   },
-  async ({ workflow_id, version_id, body }) => text(
-    await eachRequest(`/workflows/${workflow_id}/versions/${version_id}`, {
-      baseUrl: EACH_WORKFLOWS_BASE_URL,
-      method: "PUT",
-      body: JSON.stringify(body)
-    })
-  )
+  async ({
+    workflow_id,
+    version_id,
+    body,
+    validate_definition,
+    validation_mode,
+    policy_checks
+  }) => {
+    if (body.version_id !== void 0 && String(body.version_id) !== version_id) {
+      return errorText({
+        updated: false,
+        error: "body.version_id must match the version_id path parameter.",
+        expected: version_id,
+        received: body.version_id
+      });
+    }
+    if (!body.definition || typeof body.definition !== "object") {
+      return errorText({
+        updated: false,
+        error: "Current version upsert requires body.definition."
+      });
+    }
+    if (validate_definition) {
+      const validation = await validateWorkflowDefinition(body.definition, {
+        expectedVersion: version_id,
+        modelResolver: validation_mode === "live" ? getModelBySlug : void 0,
+        policyChecks: policy_checks
+      });
+      if (!validation.valid) {
+        return errorText({ updated: false, validation });
+      }
+    }
+    return text(
+      await eachRequest(`/workflows/${workflow_id}/versions/${version_id}`, {
+        baseUrl: EACH_WORKFLOWS_BASE_URL,
+        method: "PUT",
+        body: JSON.stringify(body)
+      })
+    );
+  }
 );
 registerTool(
   "eachlabs_execute_workflow",
@@ -25416,20 +26382,16 @@ registerTool(
     nickname: external_exports.string().min(1).describe("Organization nickname without @."),
     slug: external_exports.string().min(1),
     version_id: external_exports.string().min(1),
-    inputs: jsonObjectSchema.default({}),
-    webhook_url: external_exports.string().url().optional(),
-    webhook_secret: external_exports.string().min(1).optional()
+    inputs: jsonObjectSchema.default({})
   },
-  async ({ nickname, slug, version_id, inputs, webhook_url, webhook_secret }) => text(
+  async ({ nickname, slug, version_id, inputs }) => text(
     await eachRequest(`/public/@${nickname}/workflows/${slug}/versions/${version_id}/trigger`, {
       baseUrl: EACH_WORKFLOWS_BASE_URL,
       method: "POST",
       auth: false,
       body: JSON.stringify({
         api_key: requireApiKey(),
-        inputs,
-        webhook_url,
-        webhook_secret
+        inputs
       })
     })
   )
@@ -25445,8 +26407,10 @@ registerTool(
     model: external_exports.string().min(1).default("eachsense/beta"),
     messages: external_exports.array(chatMessageSchema).min(1),
     stream: external_exports.boolean().default(true).describe(
-      "Use upstream streaming, aggregated server-side (recommended: progress notifications, no idle timeout). false requests a single buffered JSON response."
+      "Use upstream streaming, aggregated server-side with progress notifications. false requests a single buffered JSON response."
     ),
+    stream_timeout_seconds: external_exports.number().int().min(30).max(900).default(900).describe("Idle timeout for streaming responses. Each event resets the timer."),
+    include_raw_safe_events: external_exports.boolean().default(false).describe("Include bounded non-reasoning status/tool/progress events in raw_safe_events."),
     session_id: external_exports.string().optional().describe("Continue an existing each::sense session."),
     mode: external_exports.enum(["max", "eco"]).optional(),
     behavior: external_exports.enum(["agent", "plan", "ask"]).optional(),
@@ -25458,12 +26422,15 @@ registerTool(
     tool_choice: external_exports.unknown().optional(),
     temperature: external_exports.number().min(0).max(2).optional(),
     max_tokens: external_exports.number().int().min(1).optional(),
+    enable_safety_checker: external_exports.boolean().optional().describe("Top-level each::sense safety-checker control."),
     extra: jsonObjectSchema.default({}).describe("Additional provider-specific request fields.")
   },
   async ({
     model,
     messages,
     stream,
+    stream_timeout_seconds,
+    include_raw_safe_events,
     session_id,
     mode,
     behavior,
@@ -25475,9 +26442,11 @@ registerTool(
     tool_choice,
     temperature,
     max_tokens,
+    enable_safety_checker,
     extra
   }, handlerExtra) => {
     const payload = {
+      ...extra,
       model,
       messages,
       session_id,
@@ -25491,13 +26460,18 @@ registerTool(
       tool_choice,
       temperature,
       max_tokens,
-      ...extra
+      enable_safety_checker
     };
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/chat/completions",
-          { baseUrl: EACH_SENSE_V1_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_V1_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events
+          },
           handlerExtra
         )
       );
@@ -25534,15 +26508,30 @@ registerTool(
     workflow_id: external_exports.string().optional(),
     version_id: external_exports.string().optional(),
     session_id: external_exports.string().optional(),
-    stream: external_exports.boolean().default(false).describe("Consume upstream streaming server-side for progress notifications; the final result is the same.")
+    stream: external_exports.boolean().default(false).describe("Consume upstream streaming server-side for progress notifications; the final result is the same."),
+    stream_timeout_seconds: external_exports.number().int().min(30).max(900).default(900),
+    include_raw_safe_events: external_exports.boolean().default(false)
   },
-  async ({ message, workflow_id, version_id, session_id, stream }, handlerExtra) => {
+  async ({
+    message,
+    workflow_id,
+    version_id,
+    session_id,
+    stream,
+    stream_timeout_seconds,
+    include_raw_safe_events
+  }, handlerExtra) => {
     const payload = { message, workflow_id, version_id, session_id };
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/workflow",
-          { baseUrl: EACH_SENSE_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events
+          },
           handlerExtra
         )
       );

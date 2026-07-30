@@ -1,6 +1,6 @@
 {
   "name": "eachlabs-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Unofficial enhanced MCP server for each::labs models, predictions, audio, workflows, each::sense, and docs.",
   "type": "module",
   "bin": {

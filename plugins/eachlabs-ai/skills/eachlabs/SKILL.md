@@ -32,6 +32,7 @@ Prefer its purpose-built tools over hand-written HTTP calls:
 - `eachlabs_list_executions` for run history with cost, and `eachlabs_upload_file` for local media inputs.
 - `eachlabs_audio_transcribe` and `eachlabs_audio_speech` for the dedicated audio APIs.
 - `eachlabs_create_workflow`, `eachlabs_execute_workflow`, and workflow execution polling tools for workflows.
+- `eachlabs_validate_workflow_definition` before workflow mutation and `eachlabs_generate_integration_code` for live-schema developer examples.
 - `eachsense_chat_completion` and `eachsense_build_workflow` for each::sense.
 - `eachlabs_llm_chat_completion` for LLM Router calls.
 

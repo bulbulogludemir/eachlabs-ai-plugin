@@ -28,11 +28,25 @@ const expected = [
   "eachlabs_create_prediction",
   "eachlabs_audio_transcribe",
   "eachlabs_audio_speech",
+  "eachlabs_validate_workflow_definition",
+  "eachlabs_generate_integration_code",
   "eachlabs_execute_workflow",
   "eachlabs_api_health",
 ];
 if (!expected.every((name) => names.has(name))) {
   throw new Error(`Missing expected tools: ${expected.filter((name) => !names.has(name)).join(", ")}`);
+}
+const publicWorkflow = tools.find(
+  (tool) => tool.name === "eachlabs_execute_public_workflow_version",
+);
+const publicProperties = publicWorkflow?.inputSchema?.properties ?? {};
+if ("webhook_url" in publicProperties || "webhook_secret" in publicProperties) {
+  throw new Error("Undocumented public-workflow webhook fields must not be exposed.");
+}
+const sense = tools.find((tool) => tool.name === "eachsense_chat_completion");
+const timeoutSchema = sense?.inputSchema?.properties?.stream_timeout_seconds;
+if (timeoutSchema?.maximum !== 900 || timeoutSchema?.minimum !== 30) {
+  throw new Error("each::sense stream timeout contract must be 30-900 seconds.");
 }
 const flagsEnabled = process.env.EACHLABS_ENABLE_EXPERIMENTAL_FLAGS === "1";
 const flagTools = [...names].filter((name) => name.includes("_flag"));
@@ -46,5 +60,30 @@ if ((!flagsEnabled && flagTools.length > 0) || (flagsEnabled && flagTools.length
 
 const { prompts } = await client.listPrompts();
 if (prompts.length !== 2) throw new Error(`Expected 2 prompts, found ${prompts.length}.`);
+
+const lint = await client.callTool({
+  name: "eachlabs_validate_workflow_definition",
+  arguments: {
+    mode: "structural",
+    definition: {
+      version: "v1",
+      input_schema: {
+        type: "object",
+        properties: { prompt: { type: "string" } },
+      },
+      steps: [
+        {
+          id: "pass",
+          type: "pass",
+          result: "{{inputs.prompt}}",
+        },
+      ],
+    },
+  },
+});
+const lintBody = JSON.parse(lint.content[0].text);
+if (lint.isError || lintBody.valid !== true) {
+  throw new Error("Workflow linter failed its structural smoke test.");
+}
 await client.close();
 console.log(`LOCAL_SMOKE_OK (${tools.length} tools, ${prompts.length} prompts)`);

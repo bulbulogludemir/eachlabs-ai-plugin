@@ -11,6 +11,7 @@ The plugin bundles a single `eachlabs` MCP server with:
 - prediction creation, polling, cancellation, and upload helpers
 - dedicated audio transcription and speech generation tools
 - workflow creation, versioning, execution, and polling tools
+- workflow linting and live-schema integration code generation
 - each::sense and each::labs LLM Router tools
 
 ## Quick Install Prompt

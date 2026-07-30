@@ -30,6 +30,7 @@ import {
 } from "./core/http.js";
 import { callOfficialDocsTool } from "./core/docs-client.js";
 import { synthesizeSpeech, transcribeAudio } from "./core/audio.js";
+import { generateIntegrationCode } from "./core/codegen.js";
 import {
   type ContentBlock,
   collectMediaUrls,
@@ -46,7 +47,9 @@ import {
   summarizeJsonSchema,
   validateAgainstSchema,
 } from "./core/schema.js";
+import { streamEachSense } from "./core/streaming.js";
 import { inferContentType, uploadFileStream } from "./core/upload.js";
+import { validateWorkflowDefinition } from "./core/workflow-validator.js";
 
 export { appendQuery, joinUrl } from "./core/http.js";
 export { collectMediaUrls } from "./core/media.js";
@@ -296,177 +299,6 @@ async function predictionToolResult(
 }
 
 
-// Consumes an SSE response server-side: concatenates OpenAI-style text deltas,
-// keeps non-delta events (status, generation_response, complete, ...), and
-// bridges them to MCP progress notifications. Falls back to plain JSON when
-// the upstream answers without text/event-stream.
-async function eachRequestStreaming(
-  path: string,
-  options: { baseUrl: string; body: string; idleTimeoutMs?: number },
-  extra?: ToolExtra,
-): Promise<unknown> {
-  const url = new URL(joinUrl(options.baseUrl, path));
-  const headers = new Headers({
-    Authorization: `Bearer ${requireApiKey()}`,
-    "Content-Type": "application/json",
-    Accept: "text/event-stream, application/json",
-  });
-  const idleController = new AbortController();
-  const idleTimeoutMs = options.idleTimeoutMs ?? 300_000;
-  let idleTimer = setTimeout(
-    () => idleController.abort(new Error("Upstream stream was idle for too long.")),
-    idleTimeoutMs,
-  );
-  const resetIdleTimer = () => {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(
-      () => idleController.abort(new Error("Upstream stream was idle for too long.")),
-      idleTimeoutMs,
-    );
-  };
-  const signal = extra?.signal
-    ? AbortSignal.any([extra.signal, idleController.signal])
-    : idleController.signal;
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: options.body,
-      signal,
-    });
-  } catch (error) {
-    clearTimeout(idleTimer);
-    throw new EachlabsError(
-      `Streaming request to ${url.pathname} failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-
-  if (!response.ok) {
-    clearTimeout(idleTimer);
-    const payload = contentType.includes("application/json")
-      ? await response.json()
-      : await response.text();
-    throw new EachlabsError(
-      `Eachlabs API returned HTTP ${response.status} for ${url.pathname}`,
-      response.status,
-      payload,
-    );
-  }
-
-  if (!contentType.includes("text/event-stream") || !response.body) {
-    clearTimeout(idleTimer);
-    return contentType.includes("application/json") ? response.json() : response.text();
-  }
-
-  const progressToken = extra?._meta?.progressToken;
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let textOut = "";
-  let textTruncated = false;
-  let eventCount = 0;
-  const events: unknown[] = [];
-  const MAX_STREAM_TEXT_CHARS = 1_000_000;
-
-  const handleData = async (data: string) => {
-    if (data === "[DONE]") return;
-    let event: unknown;
-    try {
-      event = JSON.parse(data);
-    } catch {
-      events.push(data);
-      return;
-    }
-    eventCount++;
-
-    const record = event as Record<string, any>;
-    const delta = record?.choices?.[0]?.delta;
-    if (typeof delta?.content === "string") {
-      const remaining = MAX_STREAM_TEXT_CHARS - textOut.length;
-      if (remaining > 0) textOut += delta.content.slice(0, remaining);
-      if (delta.content.length > remaining) textTruncated = true;
-    }
-
-    // Keep everything that is not a plain text/thinking delta chunk.
-    const extension = record?.eachlabs ?? record?.choices?.[0]?.delta?.eachlabs;
-    const extensionType = String(extension?.type ?? record?.type ?? "");
-    const isDeltaChunk =
-      typeof delta?.content === "string" || extensionType.includes("delta");
-    if (!isDeltaChunk && events.length < 100) {
-      events.push(extension ?? event);
-    }
-
-    if (progressToken !== undefined && extra?.sendNotification && !isDeltaChunk) {
-      await extra
-        .sendNotification({
-          method: "notifications/progress",
-          params: {
-            progressToken,
-            progress: eventCount,
-            message: extensionType || "streaming",
-          },
-        })
-        .catch(() => undefined);
-    }
-  };
-
-  while (true) {
-    if (extra?.signal?.aborted) {
-      await reader.cancel().catch(() => undefined);
-      break;
-    }
-    let chunk;
-    try {
-      chunk = await reader.read();
-    } catch (error) {
-      if (extra?.signal?.aborted) break;
-      clearTimeout(idleTimer);
-      throw new EachlabsError(
-        `Streaming response from ${url.pathname} failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    const { done, value } = chunk;
-    if (done) break;
-    resetIdleTimer();
-    buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
-
-    let boundary;
-    while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-      const eventBlock = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const data = eventBlock
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      if (data) await handleData(data.trim());
-    }
-  }
-
-  buffer += decoder.decode();
-  const trailingData = buffer
-    .split("\n")
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trimStart())
-    .join("\n")
-    .trim();
-  if (trailingData) await handleData(trailingData);
-  clearTimeout(idleTimer);
-
-  return {
-    streamed: true,
-    cancelled: Boolean(extra?.signal?.aborted) || undefined,
-    text: textOut || undefined,
-    text_truncated: textTruncated || undefined,
-    events,
-    event_count: eventCount,
-  };
-}
-
 const server = new McpServer(
   {
     name: "eachlabs-mcp",
@@ -512,6 +344,7 @@ function registerTool(
             status: error.status ?? null,
             upstream: error.payload ?? null,
             ambiguous_write: error.ambiguousWrite || undefined,
+            request: error.requestMetadata,
           });
         }
         return errorText({
@@ -783,6 +616,70 @@ registerTool(
   },
 );
 
+registerTool(
+  "eachlabs_generate_integration_code",
+  {
+    title: "Generate model integration code",
+    description:
+      "Generate deterministic TypeScript, Python, or cURL integration code from the model's current live request schema. Static model/version tables are never used.",
+    annotations: { ...readOnly },
+  },
+  {
+    model: z.string().min(1).describe("Live EachLabs model slug."),
+    language: z.enum(["typescript", "python", "curl"]),
+    mode: z
+      .enum(["async_polling", "webhook", "synchronous"])
+      .default("async_polling"),
+    framework: z
+      .enum(["none", "express", "nextjs", "fastapi", "flask"])
+      .default("none")
+      .describe("Optional webhook-handler framework."),
+    include_types: z.boolean().default(true),
+    include_zod: z
+      .boolean()
+      .default(false)
+      .describe("TypeScript only. Generate a Zod input validator."),
+  },
+  async ({ model, language, mode, framework, include_types, include_zod }) => {
+    const validFramework =
+      framework === "none" ||
+      (language === "typescript" &&
+        ["express", "nextjs"].includes(framework)) ||
+      (language === "python" && ["fastapi", "flask"].includes(framework));
+    if (!validFramework) {
+      return errorText({
+        generated: false,
+        error: `Framework '${framework}' is not compatible with language '${language}'.`,
+      });
+    }
+    if (framework !== "none" && mode !== "webhook") {
+      return errorText({
+        generated: false,
+        error: "A framework handler is only generated in webhook mode.",
+      });
+    }
+    const details = await getModelBySlug(model);
+    const schema = getRequestSchema(details);
+    if (!schema || typeof schema !== "object") {
+      return errorText({
+        generated: false,
+        error: `Model '${model}' has no live request schema.`,
+      });
+    }
+    return text(
+      generateIntegrationCode({
+        model,
+        schema: schema as Record<string, unknown>,
+        language,
+        mode,
+        framework,
+        includeTypes: include_types,
+        includeZod: include_zod,
+      }),
+    );
+  },
+);
+
 // --- Predictions ---------------------------------------------------------------
 
 registerTool(
@@ -804,7 +701,12 @@ registerTool(
       .default(true)
       .describe("Validate input against the model request_schema before creating. Skipped if no schema is documented."),
     webhook_url: z.string().url().optional(),
-    webhook_secret: z.string().optional().describe("HMAC-SHA256 secret used to sign webhook deliveries."),
+    webhook_secret: z
+      .string()
+      .optional()
+      .describe(
+        "Shared secret delivered verbatim in X-Webhook-Secret. Verify it with a constant-time string comparison; it is not an HMAC body signature.",
+      ),
     timeout_seconds: z.number().int().min(1).max(1800).default(300).describe("Only used for mode 'wait' and 'sync'."),
     poll_interval_seconds: z.number().min(0.5).max(30).default(3).describe("Only used for mode 'wait'."),
     include_media: z
@@ -1365,6 +1267,36 @@ registerTool(
 // --- Workflows ---------------------------------------------------------------------
 
 registerTool(
+  "eachlabs_validate_workflow_definition",
+  {
+    title: "Validate workflow definition",
+    description:
+      "Lint a workflow definition before mutation. Checks step IDs/types, JSON Schema, references, branches, choices, version consistency, retry/timeout bounds, and optionally live model schemas.",
+    annotations: { ...readOnly },
+  },
+  {
+    definition: jsonObjectSchema,
+    expected_version: z.string().min(1).optional(),
+    mode: z
+      .enum(["structural", "live"])
+      .default("live")
+      .describe("Live mode also resolves every model and validates its params against the current request schema."),
+    policy_checks: z
+      .boolean()
+      .default(false)
+      .describe("Optional static warnings for inline secrets and plain-HTTP endpoints; no external security scan is run."),
+  },
+  async ({ definition, expected_version, mode, policy_checks }) =>
+    text(
+      await validateWorkflowDefinition(definition, {
+        expectedVersion: expected_version,
+        modelResolver: mode === "live" ? getModelBySlug : undefined,
+        policyChecks: policy_checks,
+      }),
+    ),
+);
+
+registerTool(
   "eachlabs_list_workflow_categories",
   {
     title: "List workflow categories",
@@ -1384,16 +1316,47 @@ registerTool(
   },
   {
     workflow: jsonObjectSchema.describe(
-      "CreateWorkflowRequest body from the each::workflows API, including name, description, categories, and definition.",
+      "Current CreateWorkflowRequest body: name plus an optional definition. Other metadata fields are not accepted by the current route.",
     ),
+    validate_definition: z.boolean().default(true),
+    validation_mode: z.enum(["structural", "live"]).default("live"),
+    policy_checks: z.boolean().default(false),
   },
-  async ({ workflow }) =>
-    text(
+  async ({ workflow, validate_definition, validation_mode, policy_checks }) => {
+    const unsupportedFields = Object.keys(workflow).filter(
+      (field) => !["name", "definition"].includes(field),
+    );
+    if (typeof workflow.name !== "string" || !workflow.name.trim()) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation requires a non-empty name.",
+      });
+    }
+    if (unsupportedFields.length > 0) {
+      return errorText({
+        created: false,
+        error: "Current workflow creation accepts only name and definition.",
+        unsupported_fields: unsupportedFields,
+      });
+    }
+    const definition = workflow.definition;
+    if (validate_definition && definition !== undefined) {
+      const validation = await validateWorkflowDefinition(definition, {
+        modelResolver:
+          validation_mode === "live" ? getModelBySlug : undefined,
+        policyChecks: policy_checks,
+      });
+      if (!validation.valid) {
+        return errorText({ created: false, validation });
+      }
+    }
+    return text(
       await eachRequest("/v1/workflows", {
         method: "POST",
         body: JSON.stringify(workflow),
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1445,15 +1408,54 @@ registerTool(
     workflow_id: z.string().min(1),
     version_id: z.string().min(1),
     body: jsonObjectSchema.describe("UpsertVersionRequest body."),
+    validate_definition: z.boolean().default(true),
+    validation_mode: z.enum(["structural", "live"]).default("live"),
+    policy_checks: z.boolean().default(false),
   },
-  async ({ workflow_id, version_id, body }) =>
-    text(
+  async ({
+    workflow_id,
+    version_id,
+    body,
+    validate_definition,
+    validation_mode,
+    policy_checks,
+  }) => {
+    if (
+      body.version_id !== undefined &&
+      String(body.version_id) !== version_id
+    ) {
+      return errorText({
+        updated: false,
+        error: "body.version_id must match the version_id path parameter.",
+        expected: version_id,
+        received: body.version_id,
+      });
+    }
+    if (!body.definition || typeof body.definition !== "object") {
+      return errorText({
+        updated: false,
+        error: "Current version upsert requires body.definition.",
+      });
+    }
+    if (validate_definition) {
+      const validation = await validateWorkflowDefinition(body.definition, {
+        expectedVersion: version_id,
+        modelResolver:
+          validation_mode === "live" ? getModelBySlug : undefined,
+        policyChecks: policy_checks,
+      });
+      if (!validation.valid) {
+        return errorText({ updated: false, validation });
+      }
+    }
+    return text(
       await eachRequest(`/workflows/${workflow_id}/versions/${version_id}`, {
         baseUrl: EACH_WORKFLOWS_BASE_URL,
         method: "PUT",
         body: JSON.stringify(body),
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1612,10 +1614,8 @@ registerTool(
     slug: z.string().min(1),
     version_id: z.string().min(1),
     inputs: jsonObjectSchema.default({}),
-    webhook_url: z.string().url().optional(),
-    webhook_secret: z.string().min(1).optional(),
   },
-  async ({ nickname, slug, version_id, inputs, webhook_url, webhook_secret }) =>
+  async ({ nickname, slug, version_id, inputs }) =>
     text(
       await eachRequest(`/public/@${nickname}/workflows/${slug}/versions/${version_id}/trigger`, {
         baseUrl: EACH_WORKFLOWS_BASE_URL,
@@ -1624,8 +1624,6 @@ registerTool(
         body: JSON.stringify({
           api_key: requireApiKey(),
           inputs,
-          webhook_url,
-          webhook_secret,
         }),
       }),
     ),
@@ -1648,8 +1646,19 @@ registerTool(
       .boolean()
       .default(true)
       .describe(
-        "Use upstream streaming, aggregated server-side (recommended: progress notifications, no idle timeout). false requests a single buffered JSON response.",
+        "Use upstream streaming, aggregated server-side with progress notifications. false requests a single buffered JSON response.",
       ),
+    stream_timeout_seconds: z
+      .number()
+      .int()
+      .min(30)
+      .max(900)
+      .default(900)
+      .describe("Idle timeout for streaming responses. Each event resets the timer."),
+    include_raw_safe_events: z
+      .boolean()
+      .default(false)
+      .describe("Include bounded non-reasoning status/tool/progress events in raw_safe_events."),
     session_id: z.string().optional().describe("Continue an existing each::sense session."),
     mode: z.enum(["max", "eco"]).optional(),
     behavior: z.enum(["agent", "plan", "ask"]).optional(),
@@ -1661,6 +1670,10 @@ registerTool(
     tool_choice: z.unknown().optional(),
     temperature: z.number().min(0).max(2).optional(),
     max_tokens: z.number().int().min(1).optional(),
+    enable_safety_checker: z
+      .boolean()
+      .optional()
+      .describe("Top-level each::sense safety-checker control."),
     extra: jsonObjectSchema.default({}).describe("Additional provider-specific request fields."),
   },
   async (
@@ -1668,6 +1681,8 @@ registerTool(
       model,
       messages,
       stream,
+      stream_timeout_seconds,
+      include_raw_safe_events,
       session_id,
       mode,
       behavior,
@@ -1679,11 +1694,13 @@ registerTool(
       tool_choice,
       temperature,
       max_tokens,
+      enable_safety_checker,
       extra,
     },
     handlerExtra,
   ) => {
     const payload = {
+      ...extra,
       model,
       messages,
       session_id,
@@ -1697,14 +1714,19 @@ registerTool(
       tool_choice,
       temperature,
       max_tokens,
-      ...extra,
+      enable_safety_checker,
     };
 
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/chat/completions",
-          { baseUrl: EACH_SENSE_V1_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_V1_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events,
+          },
           handlerExtra,
         ),
       );
@@ -1748,15 +1770,33 @@ registerTool(
       .boolean()
       .default(false)
       .describe("Consume upstream streaming server-side for progress notifications; the final result is the same."),
+    stream_timeout_seconds: z.number().int().min(30).max(900).default(900),
+    include_raw_safe_events: z.boolean().default(false),
   },
-  async ({ message, workflow_id, version_id, session_id, stream }, handlerExtra) => {
+  async (
+    {
+      message,
+      workflow_id,
+      version_id,
+      session_id,
+      stream,
+      stream_timeout_seconds,
+      include_raw_safe_events,
+    },
+    handlerExtra,
+  ) => {
     const payload = { message, workflow_id, version_id, session_id };
 
     if (stream) {
       return text(
-        await eachRequestStreaming(
+        await streamEachSense(
           "/workflow",
-          { baseUrl: EACH_SENSE_BASE_URL, body: JSON.stringify({ ...payload, stream: true }) },
+          {
+            baseUrl: EACH_SENSE_BASE_URL,
+            body: JSON.stringify({ ...payload, stream: true }),
+            timeoutSeconds: stream_timeout_seconds,
+            includeRawSafeEvents: include_raw_safe_events,
+          },
           handlerExtra,
         ),
       );

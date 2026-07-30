@@ -12,7 +12,7 @@ let connectionPromise: Promise<DocsConnection> | undefined;
 async function createConnection(): Promise<DocsConnection> {
   const client = new Client({
     name: "eachlabs-docs-proxy",
-    version: "0.4.0",
+    version: "0.5.0",
   });
   const transport = new StreamableHTTPClientTransport(
     new URL(EACH_DOCS_MCP_URL),

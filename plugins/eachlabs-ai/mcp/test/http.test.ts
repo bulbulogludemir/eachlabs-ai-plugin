@@ -26,6 +26,7 @@ test("only read-only HTTP methods are safe for automatic network retries", () =>
 
 test("Retry-After seconds and jittered backoff are bounded", () => {
   assert.equal(retryDelayMs(1, "2", () => 0), 2000);
+  assert.equal(retryDelayMs(1, "120", () => 0), 60000);
   assert.equal(retryDelayMs(10, null, () => 1), 10000);
 });
 
@@ -51,6 +52,48 @@ test("a dispatched POST network failure is not retried and is marked ambiguous",
         error.ambiguousWrite === true,
     );
     assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("final rate-limit errors expose retry and request metadata", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response('{"error":"limited"}', {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": "2",
+        "X-Request-Id": "req_123",
+        "X-RateLimit-Remaining": "0",
+      },
+    });
+  try {
+    await assert.rejects(
+      eachRequest("/read", {
+        baseUrl: "https://example.invalid",
+        auth: false,
+        retries: 0,
+      }),
+      (error: unknown) => {
+        if (!(error instanceof Error) || !("requestMetadata" in error)) {
+          return false;
+        }
+        const metadata = error.requestMetadata as {
+          retryable: boolean;
+          retryAfterSeconds: number;
+          requestId: string;
+          rateLimit: { remaining: string };
+        };
+        return (
+          metadata.retryable &&
+          metadata.retryAfterSeconds === 2 &&
+          metadata.requestId === "req_123" &&
+          metadata.rateLimit.remaining === "0"
+        );
+      },
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

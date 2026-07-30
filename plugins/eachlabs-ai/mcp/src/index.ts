@@ -1,43 +1,60 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
+import {
+  DEFAULT_TIMEOUT_MS,
+  ENABLE_EXPERIMENTAL_FLAGS,
+  EACH_API_BASE_URL,
+  EACH_API_KEY,
+  EACH_SENSE_BASE_URL,
+  EACH_SENSE_V1_BASE_URL,
+  EACH_WORKFLOWS_BASE_URL,
+  MAX_AUDIO_UPLOAD_BYTES,
+  MAX_UPLOAD_BYTES,
+  MODEL_CACHE_TTL_MS,
+  PREDICTION_TERMINAL_STATUSES,
+  SERVER_VERSION,
+  UPDATE_CHECK_URL,
+  WORKFLOW_TERMINAL_STATUSES,
+} from "./config.js";
+import {
+  EachlabsError,
+  appendQuery,
+  eachRequest,
+  joinUrl,
+  requireApiKey,
+} from "./core/http.js";
+import { callOfficialDocsTool } from "./core/docs-client.js";
+import { synthesizeSpeech, transcribeAudio } from "./core/audio.js";
+import {
+  type ContentBlock,
+  collectMediaUrls,
+  mediaContentBlocks,
+} from "./core/media.js";
+import {
+  type ToolExtra,
+  pollUntilDone,
+} from "./core/polling.js";
+import {
+  generateExampleInput,
+  getRequestSchema,
+  schemaProperties,
+  summarizeJsonSchema,
+  validateAgainstSchema,
+} from "./core/schema.js";
+import { inferContentType, uploadFileStream } from "./core/upload.js";
 
-const EACH_API_BASE_URL = process.env.EACH_API_BASE_URL ?? "https://api.eachlabs.ai";
-const EACH_WORKFLOWS_BASE_URL =
-  process.env.EACH_WORKFLOWS_BASE_URL ?? "https://workflows.eachlabs.run/api/v1";
-const EACH_SENSE_BASE_URL =
-  process.env.EACH_SENSE_BASE_URL ?? "https://eachsense-agent.core.eachlabs.run";
-const EACH_SENSE_V1_BASE_URL = process.env.EACH_SENSE_V1_BASE_URL ?? `${EACH_SENSE_BASE_URL}/v1`;
-const EACH_DOCS_MCP_URL = process.env.EACH_DOCS_MCP_URL ?? "https://docs.eachlabs.ai/mcp";
-const EACH_API_KEY = process.env.EACH_API_KEY ?? process.env.EACHLABS_API_KEY;
-
-const DEFAULT_TIMEOUT_MS = 60_000;
-const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
-const MAX_EMBED_IMAGE_BYTES = 3 * 1024 * 1024;
-const MAX_MEDIA_BLOCKS = 8;
-const UPDATE_CHECK_URL =
-  "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
-const SERVER_VERSION = "0.3.1";
-
-const PREDICTION_TERMINAL_STATUSES = ["success", "failed", "cancelled"];
-const WORKFLOW_TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
-
-class EachlabsError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-    readonly payload?: unknown,
-  ) {
-    super(message);
-  }
-}
+export { appendQuery, joinUrl } from "./core/http.js";
+export { collectMediaUrls } from "./core/media.js";
+export {
+  generateExampleInput,
+  summarizeJsonSchema,
+  validateAgainstSchema,
+} from "./core/schema.js";
 
 const jsonObjectSchema = z.record(z.unknown());
 const chatMessageSchema = z.object({
@@ -45,23 +62,9 @@ const chatMessageSchema = z.object({
   content: z.unknown().describe("Message content. Strings and structured multimodal content are supported."),
 });
 
-function requireApiKey(): string {
-  if (!EACH_API_KEY) {
-    throw new EachlabsError(
-      "Missing API key. Set EACH_API_KEY or EACHLABS_API_KEY before starting the MCP server.",
-    );
-  }
-  return EACH_API_KEY;
-}
-
 function compact(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
-
-type ContentBlock =
-  | { type: "text"; text: string }
-  | { type: "image"; data: string; mimeType: string }
-  | { type: "resource_link"; uri: string; name?: string; description?: string; mimeType?: string };
 
 type ToolResult = {
   content: ContentBlock[];
@@ -96,104 +99,45 @@ function passthroughMcpResult(value: unknown): ToolResult {
   return text(value);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// `new URL(path, base)` drops the base's own path (e.g. /api/v1) when path
-// starts with "/", so URLs must be joined by string concatenation instead.
-export function joinUrl(baseUrl: string, path: string): string {
-  const base = baseUrl.replace(/\/+$/, "");
-  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
-}
-
-async function eachRequest<T>(
-  path: string,
-  options: RequestInit & {
-    baseUrl?: string;
-    auth?: boolean;
-    bearer?: boolean;
-    timeoutMs?: number;
-    retries?: number;
-  } = {},
-): Promise<T> {
-  const url = new URL(joinUrl(options.baseUrl ?? EACH_API_BASE_URL, path));
-  const headers = new Headers(options.headers);
-
-  if (options.auth !== false) {
-    if (options.bearer) {
-      headers.set("Authorization", `Bearer ${requireApiKey()}`);
-    } else {
-      headers.set("X-API-Key", requireApiKey());
-    }
-  }
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const method = (options.method ?? "GET").toUpperCase();
-  const maxAttempts = (options.retries ?? 2) + 1;
-
-  for (let attempt = 1; ; attempt++) {
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        ...options,
-        headers,
-        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-      });
-    } catch (error) {
-      if (attempt >= maxAttempts) {
-        throw new EachlabsError(
-          `Request to ${url.pathname} failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      await sleep(2 ** attempt * 1000);
-      continue;
-    }
-
-    const contentType = response.headers.get("content-type") ?? "";
-    const payload = contentType.includes("application/json")
-      ? await response.json()
-      : await response.text();
-
-    if (!response.ok) {
-      // A 429 was never processed, so any method may retry; a 5xx may have
-      // had side effects, so only GETs retry automatically.
-      const retryable =
-        response.status === 429 || (response.status >= 500 && method === "GET");
-      if (retryable && attempt < maxAttempts) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const delaySeconds = Math.min(
-          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 2 ** attempt,
-          10,
-        );
-        await sleep(delaySeconds * 1000);
-        continue;
-      }
-      throw new EachlabsError(
-        `Eachlabs API returned HTTP ${response.status} for ${url.pathname}`,
-        response.status,
-        payload,
-      );
-    }
-
-    return payload as T;
-  }
-}
-
-export function appendQuery(path: string, params: Record<string, unknown>): string {
-  const url = new URL(path, "https://placeholder.local");
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, String(value));
-    }
-  }
-  return `${url.pathname}${url.search}`;
-}
-
 function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
+}
+
+export function workflowTriggerPath(
+  workflowId: string,
+  versionId: string,
+  bulk = false,
+): string {
+  return `/v1/workflows/${bulk ? "bulk-trigger" : "trigger"}/${encodeURIComponent(workflowId)}/${encodeURIComponent(versionId)}`;
+}
+
+async function resolveWorkflowVersionId(
+  workflowId: string,
+  requested?: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (requested) return requested;
+  const workflow = await eachRequest<Record<string, unknown>>(
+    `/workflows/${encodeURIComponent(workflowId)}`,
+    { baseUrl: EACH_WORKFLOWS_BASE_URL, signal },
+  );
+  const latest =
+    workflow.latest_version_id ??
+    (workflow.latest_version as Record<string, unknown> | undefined)?.id ??
+    (workflow.latestVersion as Record<string, unknown> | undefined)?.id;
+  if (latest) return String(latest);
+
+  const versions = Array.isArray(workflow.versions)
+    ? (workflow.versions as Array<Record<string, unknown>>)
+    : [];
+  const fallback = versions.find((version) => version.latest === true) ?? versions.at(-1);
+  const id = fallback?.id ?? fallback?.version_id;
+  if (!id) {
+    throw new EachlabsError(
+      "version_id was omitted and the workflow response did not expose a latest version ID.",
+    );
+  }
+  return String(id);
 }
 
 export function flagPath(path: string, flagKey?: string): string {
@@ -240,147 +184,11 @@ export function buildFlagEvaluationBody({
   return payload;
 }
 
-export function summarizeJsonSchema(schema: unknown): unknown {
-  if (!schema || typeof schema !== "object") return schema;
-  const candidate = schema as Record<string, unknown>;
-  const properties = candidate.properties;
-  const required = Array.isArray(candidate.required) ? candidate.required : [];
-
-  if (!properties || typeof properties !== "object") {
-    return schema;
-  }
-
-  const fields = Object.entries(properties as Record<string, Record<string, unknown>>).map(
-    ([name, field]) => ({
-      name,
-      type: field.type ?? field.anyOf ?? field.oneOf ?? "unknown",
-      required: required.includes(name),
-      description: field.description,
-      default: field.default,
-      enum: field.enum,
-      examples: field.examples ?? field.example,
-    }),
-  );
-
-  return {
-    type: candidate.type ?? "object",
-    required,
-    fields,
-  };
-}
-
-function getRequestSchema(model: Record<string, unknown>): unknown {
-  return (
-    model.request_schema ??
-    model.input_schema ??
-    model.schema ??
-    (model.latest_version as Record<string, unknown> | undefined)?.request_schema
-  );
-}
-
-function schemaProperties(schema: unknown): Record<string, Record<string, unknown>> {
-  if (!schema || typeof schema !== "object") return {};
-  const properties = (schema as Record<string, unknown>).properties;
-  if (!properties || typeof properties !== "object") return {};
-  return properties as Record<string, Record<string, unknown>>;
-}
-
-function schemaRequired(schema: unknown): string[] {
-  if (!schema || typeof schema !== "object") return [];
-  const required = (schema as Record<string, unknown>).required;
-  return Array.isArray(required) ? required.filter((field): field is string => typeof field === "string") : [];
-}
-
-function exampleForField(name: string, field: Record<string, unknown>): unknown {
-  if (Array.isArray(field.examples) && field.examples.length > 0) return field.examples[0];
-  if ("example" in field) return field.example;
-  if (Array.isArray(field.enum) && field.enum.length > 0) return field.enum[0];
-
-  const type = field.type;
-  const lowerName = name.toLowerCase();
-  const description = String(field.description ?? "").toLowerCase();
-
-  if (type === "string" || !type) {
-    if (lowerName.includes("prompt")) return "A cinematic product photo of a futuristic sneaker on a clean studio background";
-    if ("default" in field && typeof field.default === "string" && field.default !== "false") {
-      return field.default;
-    }
-    if (lowerName.includes("image") || lowerName.includes("url") || description.includes("url")) {
-      return "https://example.com/input.png";
-    }
-    if (lowerName.includes("aspect")) return "1:1";
-    if (lowerName.includes("ratio")) return "1:1";
-    return `example_${name}`;
-  }
-  if ("default" in field) return field.default;
-  if (type === "number") return field.minimum ?? 1;
-  if (type === "integer") return field.minimum ?? 1;
-  if (type === "boolean") return false;
-  if (type === "array") return [];
-  if (type === "object") return {};
-
-  return null;
-}
-
-export function generateExampleInput(schema: unknown, includeOptional: boolean, overrides: Record<string, unknown>) {
-  const properties = schemaProperties(schema);
-  const required = new Set(schemaRequired(schema));
-  const input: Record<string, unknown> = {};
-
-  for (const [name, field] of Object.entries(properties)) {
-    if (includeOptional || required.has(name)) {
-      input[name] = exampleForField(name, field);
-    }
-  }
-
-  return { ...input, ...overrides };
-}
-
-export function validateAgainstSchema(schema: unknown, input: Record<string, unknown>) {
-  const properties = schemaProperties(schema);
-  const required = schemaRequired(schema);
-  const errors: Array<{ field: string; message: string; expected?: unknown; actual?: unknown }> = [];
-  const warnings: Array<{ field: string; message: string }> = [];
-
-  for (const field of required) {
-    if (!(field in input) || input[field] === undefined || input[field] === null || input[field] === "") {
-      errors.push({ field, message: "Required field is missing or empty." });
-    }
-  }
-
-  for (const [field, value] of Object.entries(input)) {
-    const property = properties[field];
-    if (!property) {
-      warnings.push({ field, message: "Field is not present in the documented request schema." });
-      continue;
-    }
-
-    const expected = property.type;
-    const actual = Array.isArray(value) ? "array" : value === null ? "null" : typeof value;
-    if (typeof expected === "string") {
-      const normalizedExpected = expected === "integer" ? "number" : expected;
-      if (expected !== "null" && actual !== normalizedExpected) {
-        errors.push({ field, message: "Field type does not match schema.", expected, actual });
-      }
-      if (expected === "integer" && typeof value === "number" && !Number.isInteger(value)) {
-        errors.push({ field, message: "Field must be an integer.", expected, actual });
-      }
-    }
-
-    if (Array.isArray(property.enum) && !property.enum.includes(value as never)) {
-      errors.push({ field, message: "Field is not one of the documented enum values.", expected: property.enum, actual: value });
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
-  };
-}
-
 let modelCache:
   | { models: Array<Record<string, unknown>>; complete: boolean; fetchedAt: number }
+  | undefined;
+let modelFetchPromise:
+  | Promise<{ models: Array<Record<string, unknown>>; complete: boolean }>
   | undefined;
 
 async function getAllModels(maxModels: number): Promise<Array<Record<string, unknown>>> {
@@ -393,27 +201,41 @@ async function getAllModels(maxModels: number): Promise<Array<Record<string, unk
     return cached.models.slice(0, maxModels);
   }
 
-  const pageSize = 100;
-  const models: Array<Record<string, unknown>> = [];
-  let complete = false;
+  modelFetchPromise ??= (async () => {
+    const pageSize = 100;
+    const models: Array<Record<string, unknown>> = [];
+    let complete = false;
 
-  for (let offset = 0; models.length < maxModels; offset += pageSize) {
-    const page = await eachRequest<unknown>(appendQuery("/v1/models", { limit: pageSize, offset }), {
-      auth: false,
-    });
-    if (!Array.isArray(page) || page.length === 0) {
-      complete = true;
-      break;
+    for (let offset = 0; models.length < maxModels; offset += pageSize) {
+      const page = await eachRequest<unknown>(
+        appendQuery("/v1/models", { limit: pageSize, offset }),
+        { auth: false },
+      );
+      if (!Array.isArray(page) || page.length === 0) {
+        complete = true;
+        break;
+      }
+      models.push(...(page as Array<Record<string, unknown>>));
+      if (page.length < pageSize) {
+        complete = true;
+        break;
+      }
     }
-    models.push(...(page as Array<Record<string, unknown>>));
-    if (page.length < pageSize) {
-      complete = true;
-      break;
-    }
+
+    return { models, complete };
+  })();
+
+  let result: { models: Array<Record<string, unknown>>; complete: boolean };
+  try {
+    result = await modelFetchPromise;
+  } finally {
+    modelFetchPromise = undefined;
   }
-
-  modelCache = { models, complete, fetchedAt: Date.now() };
-  return models.slice(0, maxModels);
+  modelCache = { ...result, fetchedAt: Date.now() };
+  if (!result.complete && result.models.length < maxModels) {
+    return getAllModels(maxModels);
+  }
+  return result.models.slice(0, maxModels);
 }
 
 export function trimModel(model: Record<string, unknown>) {
@@ -458,95 +280,6 @@ async function getModelBySlug(slug: string): Promise<Record<string, unknown>> {
   return eachRequest<Record<string, unknown>>(appendQuery("/v1/model", { slug }));
 }
 
-async function callOfficialDocsTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-  const client = new Client({ name: "eachlabs-unofficial-docs-proxy", version: "0.2.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(EACH_DOCS_MCP_URL));
-
-  try {
-    await client.connect(transport);
-    return await client.callTool({ name, arguments: args });
-  } finally {
-    await client.close().catch(() => undefined);
-  }
-}
-
-const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-  gif: "image/gif",
-};
-const MEDIA_MIME_BY_EXTENSION: Record<string, string> = {
-  ...IMAGE_MIME_BY_EXTENSION,
-  mp4: "video/mp4",
-  webm: "video/webm",
-  mov: "video/quicktime",
-  mp3: "audio/mpeg",
-  wav: "audio/wav",
-  ogg: "audio/ogg",
-  flac: "audio/flac",
-  m4a: "audio/mp4",
-};
-
-function urlExtension(url: string): string {
-  try {
-    const pathname = new URL(url).pathname;
-    const dot = pathname.lastIndexOf(".");
-    return dot === -1 ? "" : pathname.slice(dot + 1).toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-export function collectMediaUrls(value: unknown, found: string[] = []): string[] {
-  if (typeof value === "string") {
-    if (/^https?:\/\//.test(value) && MEDIA_MIME_BY_EXTENSION[urlExtension(value)]) {
-      found.push(value);
-    }
-  } else if (Array.isArray(value)) {
-    for (const item of value) collectMediaUrls(item, found);
-  } else if (value && typeof value === "object") {
-    for (const item of Object.values(value)) collectMediaUrls(item, found);
-  }
-  return found;
-}
-
-async function mediaContentBlocks(output: unknown, embedImages: boolean): Promise<ContentBlock[]> {
-  const urls = [...new Set(collectMediaUrls(output))].slice(0, MAX_MEDIA_BLOCKS);
-  const blocks: ContentBlock[] = [];
-
-  for (const url of urls) {
-    const extension = urlExtension(url);
-    const imageMime = IMAGE_MIME_BY_EXTENSION[extension];
-
-    if (imageMime && embedImages) {
-      try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-        const declaredLength = Number(response.headers.get("content-length"));
-        if (response.ok && (!Number.isFinite(declaredLength) || declaredLength <= MAX_EMBED_IMAGE_BYTES)) {
-          const buffer = Buffer.from(await response.arrayBuffer());
-          if (buffer.byteLength <= MAX_EMBED_IMAGE_BYTES) {
-            blocks.push({ type: "image", data: buffer.toString("base64"), mimeType: imageMime });
-            continue;
-          }
-        }
-      } catch {
-        // fall through to a link block
-      }
-    }
-
-    blocks.push({
-      type: "resource_link",
-      uri: url,
-      name: decodeURIComponent(url.split("/").pop() ?? url).split("?")[0],
-      mimeType: MEDIA_MIME_BY_EXTENSION[extension],
-    });
-  }
-
-  return blocks;
-}
-
 async function predictionToolResult(
   value: unknown,
   prediction: Record<string, unknown> | undefined,
@@ -562,50 +295,6 @@ async function predictionToolResult(
   return media.length > 0 ? { content: [...base.content, ...media] } : base;
 }
 
-// Subset of the SDK's RequestHandlerExtra that the poll helper relies on.
-type ToolExtra = {
-  signal?: AbortSignal;
-  _meta?: { progressToken?: string | number };
-  sendNotification?: (notification: {
-    method: "notifications/progress";
-    params: { progressToken: string | number; progress: number; total?: number; message?: string };
-  }) => Promise<void>;
-};
-
-async function pollUntilDone(
-  fetchCurrent: () => Promise<Record<string, unknown>>,
-  terminalStatuses: string[],
-  timeoutSeconds: number,
-  pollIntervalSeconds: number,
-  extra?: ToolExtra,
-): Promise<{ completed: boolean; last?: Record<string, unknown> }> {
-  const deadline = Date.now() + timeoutSeconds * 1000;
-  let last: Record<string, unknown> | undefined;
-
-  while (Date.now() <= deadline) {
-    if (extra?.signal?.aborted) break;
-    last = await fetchCurrent();
-    const status = String(last.status ?? "").toLowerCase();
-    if (terminalStatuses.includes(status)) {
-      return { completed: true, last };
-    }
-
-    const progressToken = extra?._meta?.progressToken;
-    if (progressToken !== undefined && extra?.sendNotification) {
-      const elapsedSeconds = Math.round(timeoutSeconds - (deadline - Date.now()) / 1000);
-      await extra
-        .sendNotification({
-          method: "notifications/progress",
-          params: { progressToken, progress: elapsedSeconds, total: timeoutSeconds, message: status },
-        })
-        .catch(() => undefined);
-    }
-
-    await sleep(pollIntervalSeconds * 1000);
-  }
-
-  return { completed: false, last };
-}
 
 // Consumes an SSE response server-side: concatenates OpenAI-style text deltas,
 // keeps non-delta events (status, generation_response, complete, ...), and
@@ -613,26 +302,51 @@ async function pollUntilDone(
 // the upstream answers without text/event-stream.
 async function eachRequestStreaming(
   path: string,
-  options: { baseUrl: string; body: string; timeoutMs?: number },
+  options: { baseUrl: string; body: string; idleTimeoutMs?: number },
   extra?: ToolExtra,
 ): Promise<unknown> {
   const url = new URL(joinUrl(options.baseUrl, path));
   const headers = new Headers({
-    "X-API-Key": requireApiKey(),
+    Authorization: `Bearer ${requireApiKey()}`,
     "Content-Type": "application/json",
     Accept: "text/event-stream, application/json",
   });
+  const idleController = new AbortController();
+  const idleTimeoutMs = options.idleTimeoutMs ?? 300_000;
+  let idleTimer = setTimeout(
+    () => idleController.abort(new Error("Upstream stream was idle for too long.")),
+    idleTimeoutMs,
+  );
+  const resetIdleTimer = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(
+      () => idleController.abort(new Error("Upstream stream was idle for too long.")),
+      idleTimeoutMs,
+    );
+  };
+  const signal = extra?.signal
+    ? AbortSignal.any([extra.signal, idleController.signal])
+    : idleController.signal;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: options.body,
-    signal: AbortSignal.timeout(options.timeoutMs ?? 300_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: options.body,
+      signal,
+    });
+  } catch (error) {
+    clearTimeout(idleTimer);
+    throw new EachlabsError(
+      `Streaming request to ${url.pathname} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
 
   if (!response.ok) {
+    clearTimeout(idleTimer);
     const payload = contentType.includes("application/json")
       ? await response.json()
       : await response.text();
@@ -644,6 +358,7 @@ async function eachRequestStreaming(
   }
 
   if (!contentType.includes("text/event-stream") || !response.body) {
+    clearTimeout(idleTimer);
     return contentType.includes("application/json") ? response.json() : response.text();
   }
 
@@ -652,8 +367,10 @@ async function eachRequestStreaming(
   const decoder = new TextDecoder();
   let buffer = "";
   let textOut = "";
+  let textTruncated = false;
   let eventCount = 0;
   const events: unknown[] = [];
+  const MAX_STREAM_TEXT_CHARS = 1_000_000;
 
   const handleData = async (data: string) => {
     if (data === "[DONE]") return;
@@ -668,7 +385,11 @@ async function eachRequestStreaming(
 
     const record = event as Record<string, any>;
     const delta = record?.choices?.[0]?.delta;
-    if (typeof delta?.content === "string") textOut += delta.content;
+    if (typeof delta?.content === "string") {
+      const remaining = MAX_STREAM_TEXT_CHARS - textOut.length;
+      if (remaining > 0) textOut += delta.content.slice(0, remaining);
+      if (delta.content.length > remaining) textTruncated = true;
+    }
 
     // Keep everything that is not a plain text/thinking delta chunk.
     const extension = record?.eachlabs ?? record?.choices?.[0]?.delta?.eachlabs;
@@ -698,23 +419,49 @@ async function eachRequestStreaming(
       await reader.cancel().catch(() => undefined);
       break;
     }
-    const { done, value } = await reader.read();
+    let chunk;
+    try {
+      chunk = await reader.read();
+    } catch (error) {
+      if (extra?.signal?.aborted) break;
+      clearTimeout(idleTimer);
+      throw new EachlabsError(
+        `Streaming response from ${url.pathname} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const { done, value } = chunk;
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    resetIdleTimer();
+    buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
 
-    let newline;
-    while ((newline = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, newline).trim();
-      buffer = buffer.slice(newline + 1);
-      if (line.startsWith("data:")) {
-        await handleData(line.slice(5).trim());
-      }
+    let boundary;
+    while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+      const eventBlock = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const data = eventBlock
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
+      if (data) await handleData(data.trim());
     }
   }
 
+  buffer += decoder.decode();
+  const trailingData = buffer
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n")
+    .trim();
+  if (trailingData) await handleData(trailingData);
+  clearTimeout(idleTimer);
+
   return {
     streamed: true,
+    cancelled: Boolean(extra?.signal?.aborted) || undefined,
     text: textOut || undefined,
+    text_truncated: textTruncated || undefined,
     events,
     event_count: eventCount,
   };
@@ -730,6 +477,8 @@ const server = new McpServer(
       "Unofficial MCP server for the each::labs platform (models, predictions, workflows, each::sense, LLM router).",
       "Typical model-run flow: eachlabs_search_models -> eachlabs_get_model_request_schema -> eachlabs_create_prediction (mode 'wait' for short jobs, 'async' + eachlabs_get_prediction for long ones).",
       "Media inputs must be URLs; upload local files first with eachlabs_upload_file.",
+      "Dedicated audio APIs are available through eachlabs_audio_transcribe and eachlabs_audio_speech.",
+      "Undocumented each::flags tools are experimental and only registered when EACHLABS_ENABLE_EXPERIMENTAL_FLAGS=1.",
       "Requires EACH_API_KEY (or EACHLABS_API_KEY) in the environment for everything except the public model catalog and docs search.",
     ].join("\n"),
   },
@@ -762,6 +511,7 @@ function registerTool(
             error: error.message,
             status: error.status ?? null,
             upstream: error.payload ?? null,
+            ambiguous_write: error.ambiguousWrite || undefined,
           });
         }
         return errorText({
@@ -804,6 +554,24 @@ registerTool(
   },
   async ({ command }) =>
     passthroughMcpResult(await callOfficialDocsTool("query_docs_filesystem_each_labs", { command })),
+);
+
+registerTool(
+  "eachlabs_submit_docs_feedback",
+  {
+    title: "Submit each::labs docs feedback",
+    description:
+      "Submit focused feedback about an official each::labs documentation page through the official docs MCP.",
+    annotations: { ...write, idempotentHint: false },
+  },
+  {
+    path: z.string().min(1).describe("Documentation path the feedback applies to."),
+    feedback: z.string().min(1).describe("Specific correction or improvement request."),
+  },
+  async ({ path, feedback }) =>
+    passthroughMcpResult(
+      await callOfficialDocsTool("submit_feedback", { path, feedback }),
+    ),
 );
 
 // --- Model catalog and schemas -----------------------------------------------
@@ -1100,14 +868,14 @@ registerTool(
       return text({ created, warning: "Prediction response did not include a prediction ID; cannot wait." });
     }
 
-    const { completed, last } = await pollUntilDone(
-      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${predictionId}`),
+    const { completed, cancelled, last } = await pollUntilDone(
+      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${predictionId}`, { signal: extra?.signal }),
       PREDICTION_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra,
     );
-    if (!completed) return text({ created, status: "timeout", last });
+    if (!completed) return text({ created, status: cancelled ? "cancelled_by_client" : "timeout", last });
     return predictionToolResult({ created, final: last }, last, include_media, embed_images);
   },
 );
@@ -1136,18 +904,20 @@ registerTool(
   },
   async ({ prediction_id, wait, timeout_seconds, poll_interval_seconds, include_media, embed_images }, extra) => {
     if (!wait) {
-      const prediction = await eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`);
+      const prediction = await eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`, {
+        signal: extra?.signal,
+      });
       return predictionToolResult(prediction, prediction, include_media, embed_images);
     }
 
-    const { completed, last } = await pollUntilDone(
-      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`),
+    const { completed, cancelled, last } = await pollUntilDone(
+      () => eachRequest<Record<string, unknown>>(`/v1/prediction/${prediction_id}`, { signal: extra?.signal }),
       PREDICTION_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra,
     );
-    if (!completed) return text({ status: "timeout", prediction_id, last });
+    if (!completed) return text({ status: cancelled ? "cancelled_by_client" : "timeout", prediction_id, last });
     return predictionToolResult(last, last, include_media, embed_images);
   },
 );
@@ -1179,17 +949,121 @@ registerTool(
     offset: z.number().int().min(0).default(0),
     model: z.string().optional().describe("Filter by model slug."),
     status: z.string().optional().describe("Comma-separated statuses, e.g. success,failed."),
+    error_classification: z
+      .array(
+        z.enum([
+          "content_moderation",
+          "execution_timeout",
+          "invalid_user_input",
+          "invalid_model_config",
+          "provider_auth",
+          "provider_error",
+          "provider_rate_limit",
+          "provider_unavailable",
+          "internal_error",
+          "unknown",
+        ]),
+      )
+      .optional()
+      .describe("Filter failed executions by one or more canonical error classifications."),
     workflow_id: z.string().optional(),
     workflow_execution_id: z.string().optional(),
     from: z.string().optional().describe("RFC 3339 start of time window, e.g. 2026-06-01T00:00:00Z."),
     to: z.string().optional().describe("RFC 3339 end of time window."),
   },
-  async ({ limit, offset, model, status, workflow_id, workflow_execution_id, from, to }) =>
+  async ({ limit, offset, model, status, error_classification, workflow_id, workflow_execution_id, from, to }) =>
     text(
       await eachRequest(
-        appendQuery("/v1/executions", { limit, offset, model, status, workflow_id, workflow_execution_id, from, to }),
+        appendQuery("/v1/executions", {
+          limit,
+          offset,
+          model,
+          status,
+          error_classification: error_classification?.join(","),
+          workflow_id,
+          workflow_execution_id,
+          from,
+          to,
+        }),
       ),
     ),
+);
+
+// --- Audio ---------------------------------------------------------------------
+
+registerTool(
+  "eachlabs_audio_transcribe",
+  {
+    title: "Transcribe audio",
+    description:
+      "Transcribe a local audio file through POST /v1/audio/transcriptions. Files are sent as multipart form data and must be 25 MB or smaller.",
+    annotations: { ...write },
+  },
+  {
+    file_path: z.string().min(1).describe("Absolute path to a local audio file."),
+    model: z.string().min(1).default("openai/whisper-large-v3"),
+    language: z.string().min(2).optional().describe("Optional language code."),
+    response_format: z.enum(["json", "verbose_json"]).default("json"),
+    timestamp_granularities: z
+      .array(z.enum(["word", "segment"]))
+      .max(2)
+      .optional()
+      .describe("Timestamp detail; use verbose_json when requesting timestamps."),
+  },
+  async (
+    { file_path, model, language, response_format, timestamp_granularities },
+    extra,
+  ) =>
+    text(
+      await transcribeAudio(
+        {
+          filePath: file_path,
+          model,
+          language,
+          responseFormat: response_format,
+          timestampGranularities: timestamp_granularities,
+        },
+        extra?.signal,
+      ),
+    ),
+);
+
+registerTool(
+  "eachlabs_audio_speech",
+  {
+    title: "Generate speech audio",
+    description:
+      "Generate speech through POST /v1/audio/speech and return the streamed MP3 or PCM response as an MCP audio block.",
+    annotations: { ...write },
+  },
+  {
+    model: z.string().min(1),
+    input: z.string().min(1).max(2000),
+    voice: z.string().min(1),
+    format: z.enum(["mp3", "pcm"]).default("mp3"),
+    speed: z.number().min(0.25).max(4).optional(),
+    instructions: z.string().max(1000).optional(),
+  },
+  async ({ model, input, voice, format, speed, instructions }, extra) => {
+    const audio = await synthesizeSpeech(
+      { model, input, voice, format, speed, instructions },
+      extra?.signal,
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: compact({
+            generated: true,
+            execution_id: audio.executionId,
+            request_id: audio.requestId,
+            mime_type: audio.mimeType,
+          }),
+        },
+        { type: "audio", data: audio.data, mimeType: audio.mimeType },
+      ],
+    };
+  },
 );
 
 // --- Storage -------------------------------------------------------------------
@@ -1205,7 +1079,7 @@ registerTool(
   {
     content_type: z.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
     file_type: z.enum(["image", "video", "audio", "other"]).default("other"),
-    expires_in_seconds: z.number().int().min(1).optional().describe("Optional retention control for the stored file."),
+    expires_in_seconds: z.number().int().min(60).max(31_536_000).optional().describe("Optional retention control for the stored file."),
   },
   async ({ content_type, file_type, expires_in_seconds }) =>
     text(
@@ -1226,12 +1100,20 @@ registerTool(
   },
   {
     file_path: z.string().min(1).describe("Absolute local file path."),
-    content_type: z.string().min(1).describe("MIME type, e.g. image/png, video/mp4, audio/mpeg."),
+    content_type: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Optional MIME type. Inferred from the file signature or extension when omitted."),
     file_type: z.enum(["image", "video", "audio", "other"]).default("other"),
-    expires_in_seconds: z.number().int().min(1).optional().describe("Optional retention control for the stored file."),
+    expires_in_seconds: z.number().int().min(60).max(31_536_000).optional().describe("Optional retention control for the stored file."),
+    timeout_seconds: z.number().int().min(10).max(600).default(120),
   },
-  async ({ file_path, content_type, file_type, expires_in_seconds }) => {
+  async ({ file_path, content_type, file_type, expires_in_seconds, timeout_seconds }, extra) => {
     const info = await stat(file_path);
+    if (!info.isFile()) {
+      return errorText({ uploaded: false, error: "file_path must point to a regular file." });
+    }
     if (info.size > MAX_UPLOAD_BYTES) {
       return errorText({
         uploaded: false,
@@ -1239,9 +1121,11 @@ registerTool(
       });
     }
 
+    const resolvedContentType = await inferContentType(file_path, content_type);
     const presign = await eachRequest<Record<string, unknown>>("/v1/upload/presign", {
       method: "POST",
-      body: JSON.stringify({ content_type, file_type, expires_in_seconds }),
+      body: JSON.stringify({ content_type: resolvedContentType, file_type, expires_in_seconds }),
+      signal: extra?.signal,
     });
     const presignedUrl = String(presign.presigned_url ?? "");
     if (!presignedUrl) {
@@ -1252,14 +1136,14 @@ registerTool(
       presign.required_headers && typeof presign.required_headers === "object"
         ? (presign.required_headers as Record<string, string>)
         : {};
-    const bytes = await readFile(file_path);
-    const uploadResponse = await fetch(presignedUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": content_type,
-        ...requiredHeaders,
-      },
-      body: bytes,
+    const uploadResponse = await uploadFileStream({
+      url: presignedUrl,
+      filePath: file_path,
+      contentType: resolvedContentType,
+      requiredHeaders,
+      size: info.size,
+      timeoutMs: timeout_seconds * 1000,
+      extra,
     });
 
     if (!uploadResponse.ok) {
@@ -1328,6 +1212,7 @@ registerTool(
 
 // --- each::flags --------------------------------------------------------------------
 
+if (ENABLE_EXPERIMENTAL_FLAGS) {
 registerTool(
   "eachlabs_list_flags",
   {
@@ -1475,6 +1360,7 @@ registerTool(
   async ({ flag_key, path }) =>
     text(await eachRequest(flagPath(path, flag_key), { method: "DELETE" })),
 );
+}
 
 // --- Workflows ---------------------------------------------------------------------
 
@@ -1503,8 +1389,7 @@ registerTool(
   },
   async ({ workflow }) =>
     text(
-      await eachRequest("/workflows", {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+      await eachRequest("/v1/workflows", {
         method: "POST",
         body: JSON.stringify(workflow),
       }),
@@ -1584,15 +1469,22 @@ registerTool(
     inputs: jsonObjectSchema.default({}),
     version_id: z.string().optional().describe("Defaults to the latest version."),
     webhook_url: z.string().url().optional(),
+    webhook_secret: z.string().min(1).optional(),
   },
-  async ({ workflow_id, inputs, version_id, webhook_url }) =>
-    text(
-      await eachRequest(`/${workflow_id}/trigger`, {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+  async ({ workflow_id, inputs, version_id, webhook_url, webhook_secret }, extra) => {
+    const resolvedVersion = await resolveWorkflowVersionId(
+      workflow_id,
+      version_id,
+      extra?.signal,
+    );
+    return text(
+      await eachRequest(workflowTriggerPath(workflow_id, resolvedVersion), {
         method: "POST",
-        body: JSON.stringify({ version_id, inputs, webhook_url }),
+        body: JSON.stringify({ inputs, webhook_url, webhook_secret }),
+        signal: extra?.signal,
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1611,15 +1503,22 @@ registerTool(
       .describe("One input object per execution; the API allows 1-10 items."),
     version_id: z.string().optional(),
     webhook_url: z.string().url().optional(),
+    webhook_secret: z.string().min(1).optional(),
   },
-  async ({ workflow_id, inputs, version_id, webhook_url }) =>
-    text(
-      await eachRequest(`/${workflow_id}/bulk-trigger`, {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+  async ({ workflow_id, inputs, version_id, webhook_url, webhook_secret }, extra) => {
+    const resolvedVersion = await resolveWorkflowVersionId(
+      workflow_id,
+      version_id,
+      extra?.signal,
+    );
+    return text(
+      await eachRequest(workflowTriggerPath(workflow_id, resolvedVersion, true), {
         method: "POST",
-        body: JSON.stringify({ version_id, inputs, webhook_url }),
+        body: JSON.stringify({ inputs, webhook_url, webhook_secret }),
+        signal: extra?.signal,
       }),
-    ),
+    );
+  },
 );
 
 registerTool(
@@ -1637,8 +1536,8 @@ registerTool(
   },
   async ({ workflow_id, limit, offset, bulk_id }) =>
     text(
-      await eachRequest(appendQuery(`/workflows/${workflow_id}/executions`, { limit, offset, bulk_id }), {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+      await eachRequest(appendQuery(`/v1/workflows/${workflow_id}/executions`, { limit, offset, bulk_id }), {
+        baseUrl: EACH_API_BASE_URL,
       }),
     ),
 );
@@ -1659,20 +1558,24 @@ registerTool(
   },
   async ({ execution_id, wait, timeout_seconds, poll_interval_seconds }, extra) => {
     const fetchExecution = () =>
-      eachRequest<Record<string, unknown>>(`/executions/${execution_id}`, {
-        baseUrl: EACH_WORKFLOWS_BASE_URL,
+      eachRequest<Record<string, unknown>>(`/v1/workflows/executions/${execution_id}`, {
+        signal: extra?.signal,
       });
 
     if (!wait) return text(await fetchExecution());
 
-    const { completed, last } = await pollUntilDone(
+    const { completed, cancelled, last } = await pollUntilDone(
       fetchExecution,
       WORKFLOW_TERMINAL_STATUSES,
       timeout_seconds,
       poll_interval_seconds,
       extra,
     );
-    return text(completed ? last : { status: "timeout", execution_id, last });
+    return text(
+      completed
+        ? last
+        : { status: cancelled ? "cancelled_by_client" : "timeout", execution_id, last },
+    );
   },
 );
 
@@ -1710,13 +1613,20 @@ registerTool(
     version_id: z.string().min(1),
     inputs: jsonObjectSchema.default({}),
     webhook_url: z.string().url().optional(),
+    webhook_secret: z.string().min(1).optional(),
   },
-  async ({ nickname, slug, version_id, inputs, webhook_url }) =>
+  async ({ nickname, slug, version_id, inputs, webhook_url, webhook_secret }) =>
     text(
       await eachRequest(`/public/@${nickname}/workflows/${slug}/versions/${version_id}/trigger`, {
         baseUrl: EACH_WORKFLOWS_BASE_URL,
         method: "POST",
-        body: JSON.stringify({ inputs, webhook_url }),
+        auth: false,
+        body: JSON.stringify({
+          api_key: requireApiKey(),
+          inputs,
+          webhook_url,
+          webhook_secret,
+        }),
       }),
     ),
 );
@@ -1957,7 +1867,6 @@ registerTool(
     text(
       await eachRequest("/v1/chat/completions", {
         method: "POST",
-        bearer: true,
         timeoutMs: 300_000,
         headers: webhook_url ? { "X-Eachlabs-Webhook-Url": webhook_url } : undefined,
         body: JSON.stringify({ model, messages, temperature, max_tokens, stream: false, ...extra }),
@@ -1982,9 +1891,16 @@ registerTool(
     query: jsonObjectSchema.default({}),
     body: z.unknown().optional(),
     auth: z.boolean().default(true),
-    bearer: z.boolean().default(false).describe("Use Authorization: Bearer instead of X-API-Key."),
+    auth_mode: z
+      .enum(["bearer", "x-api-key"])
+      .default("bearer")
+      .describe("Bearer is the current documented default; x-api-key is retained for legacy endpoints."),
+    bearer: z
+      .boolean()
+      .optional()
+      .describe("Deprecated compatibility switch. true maps to bearer; false maps to x-api-key."),
   },
-  async ({ target, method, path, query, body, auth, bearer }) => {
+  async ({ target, method, path, query, body, auth, auth_mode, bearer }) => {
     const baseUrl =
       target === "workflows"
         ? EACH_WORKFLOWS_BASE_URL
@@ -2000,7 +1916,12 @@ registerTool(
         baseUrl,
         method,
         auth,
-        bearer,
+        authMode:
+          bearer === undefined
+            ? auth_mode
+            : bearer
+              ? "bearer"
+              : "x-api-key",
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
     );
@@ -2016,24 +1937,47 @@ registerTool(
   },
   {},
   async () => {
-    const catalog = await eachRequest<unknown>(appendQuery("/v1/models", { limit: 1, offset: 0 }), {
-      auth: false,
-    });
+    const [catalogResult, updateResult] = await Promise.allSettled([
+      eachRequest<unknown>(appendQuery("/v1/models", { limit: 1, offset: 0 }), {
+        auth: false,
+        timeoutMs: 5000,
+        retries: 0,
+      }),
+      fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(5000) }),
+    ]);
+
+    const catalog =
+      catalogResult.status === "fulfilled"
+        ? Array.isArray(catalogResult.value)
+          ? { reachable: true, sample_size: catalogResult.value.length }
+          : { reachable: true, response: catalogResult.value }
+        : {
+            reachable: false,
+            error:
+              catalogResult.reason instanceof Error
+                ? catalogResult.reason.message
+                : String(catalogResult.reason),
+          };
 
     let update: Record<string, unknown> = { current_version: SERVER_VERSION };
     try {
-      const response = await fetch(UPDATE_CHECK_URL, { signal: AbortSignal.timeout(5000) });
+      if (updateResult.status === "rejected") throw updateResult.reason;
+      const response = updateResult.value;
       if (response.ok) {
         const remote = (await response.json()) as { version?: string };
         update = {
           current_version: SERVER_VERSION,
           latest_version: remote.version ?? "unknown",
           update_available: Boolean(remote.version && remote.version !== SERVER_VERSION),
-          how_to_update: "git pull && npm install && npm run build (or `npm run update`)",
+          how_to_update:
+            "Marketplace installs: update through the Codex/Claude plugin marketplace. Source checkouts: npm ci && npm run build.",
         };
+      } else {
+        update.update_check = `HTTP ${response.status}`;
       }
-    } catch {
-      update.update_check = "unreachable";
+    } catch (error) {
+      update.update_check =
+        error instanceof Error ? error.message : "unreachable";
     }
 
     return text({
@@ -2041,7 +1985,7 @@ registerTool(
       workflows_base_url: EACH_WORKFLOWS_BASE_URL,
       sense_base_url: EACH_SENSE_BASE_URL,
       api_key_configured: Boolean(EACH_API_KEY),
-      catalog_probe: Array.isArray(catalog) ? { reachable: true, sample_size: catalog.length } : catalog,
+      catalog_probe: catalog,
       update,
     });
   },

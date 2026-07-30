@@ -4,13 +4,13 @@
     "name": "Demir Bulbuloglu"
   },
   "description": "Claude Code plugins for each::labs generative media APIs and MCP tools.",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "plugins": [
     {
       "name": "eachlabs-ai",
       "source": "./plugins/eachlabs-ai",
       "description": "Build with each::labs generative media APIs, workflows, each::sense, docs, and MCP tools.",
-      "version": "0.2.0",
+      "version": "0.4.0",
       "author": {
         "name": "Eachlabs"
       },

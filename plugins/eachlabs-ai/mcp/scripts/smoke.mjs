@@ -21,9 +21,9 @@ const check = (label, ok, detail = "") => {
 };
 
 const { tools } = await client.listTools();
-check("tool count", tools.length === 45, `${tools.length} tools`);
+check("stable tool count", tools.length === 42, `${tools.length} tools`);
 check(
-  "flags tools registered",
+  "experimental flags hidden by default",
   [
     "eachlabs_list_flags",
     "eachlabs_get_flag",
@@ -31,8 +31,11 @@ check(
     "eachlabs_create_flag",
     "eachlabs_update_flag",
     "eachlabs_delete_flag",
-  ].every((name) => tools.some((tool) => tool.name === name)),
+  ].every((name) => !tools.some((tool) => tool.name === name)),
 );
+check("audio tools registered", ["eachlabs_audio_transcribe", "eachlabs_audio_speech"].every(
+  (name) => tools.some((tool) => tool.name === name),
+));
 check(
   "annotations present",
   tools.every((tool) => tool.annotations?.readOnlyHint !== undefined),
@@ -49,6 +52,15 @@ check("update check ran", Boolean(healthBody.update?.current_version));
 
 const search = await client.callTool({ name: "eachlabs_search_models", arguments: { name: "flux", limit: 3 } });
 check("public model search", !(search.isError ?? false) && JSON.parse(search.content[0].text).models?.length > 0);
+
+const docs = await client.callTool({
+  name: "search_each_labs",
+  arguments: { query: "audio transcriptions workflow trigger" },
+});
+check(
+  "official docs MCP proxy",
+  !(docs.isError ?? false) && docs.content.some((block) => block.type === "text" && block.text.length > 0),
+);
 
 if (!process.env.EACH_API_KEY) {
   const err = await client.callTool({ name: "eachlabs_get_model", arguments: { slug: "flux-2-max" } });

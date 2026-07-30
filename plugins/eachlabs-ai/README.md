@@ -14,8 +14,8 @@ This plugin packages Codex guidance and a bundled each::labs MCP for building wi
 
 `eachlabs` combines:
 
-- official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`
-- action tools for model discovery, schemas, predictions, workflows, each::sense, and the LLM Router
+- official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`, `eachlabs_submit_docs_feedback`
+- action tools for model discovery, schemas, predictions, audio, workflows, each::sense, and the LLM Router
 
 It expects an API key in the runtime environment for account actions:
 

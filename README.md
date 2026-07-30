@@ -9,6 +9,7 @@ The plugin bundles a single `eachlabs` MCP server with:
 - official each::labs docs proxy tools
 - model discovery and request-schema tools
 - prediction creation, polling, cancellation, and upload helpers
+- dedicated audio transcription and speech generation tools
 - workflow creation, versioning, execution, and polling tools
 - each::sense and each::labs LLM Router tools
 
@@ -71,9 +72,10 @@ Claude Code prompts for the API key through plugin user configuration. You can l
 ## What You Get
 
 - One bundled `eachlabs` MCP server
-- Official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`
+- Official docs proxy tools: `search_each_labs`, `query_docs_filesystem_each_labs`, `eachlabs_submit_docs_feedback`
 - Model search, recommendation, details, schemas, example inputs, and input validation
 - Prediction create, checked create, run-and-wait, status polling, and cancellation
+- Audio transcription and streamed speech generation
 - Presigned upload and local file upload helpers
 - Webhook listing and webhook detail lookup
 - Workflow category listing, create, update, version upsert, execute, bulk execute, and execution polling

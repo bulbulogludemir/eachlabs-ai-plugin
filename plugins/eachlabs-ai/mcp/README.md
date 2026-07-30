@@ -7,6 +7,7 @@ It exposes the parts an agent needs to work well with Eachlabs:
 - search the model catalog and inspect request schemas before calling models
 - create predictions (async, wait-for-result, or synchronous), poll, inspect, and cancel them
 - browse the execution history with cost and runtime per run
+- transcribe local audio and generate streamed speech audio
 - upload and delete media files via presigned storage
 - inspect webhook deliveries
 - create, update, version, trigger, bulk-trigger, and monitor workflows
@@ -27,7 +28,8 @@ Other scripts:
 ```bash
 npm test          # unit tests for the pure helpers (URL joining, schema validation, media detection)
 npm run smoke     # boots the built server over stdio and exercises public endpoints
-npm run update    # git pull + install + rebuild (eachlabs_api_health reports when an update is available)
+npm run update    # refresh npm dependencies and rebuild a source checkout
+npm run build:debug # rebuild with an external source map
 ```
 
 Set one of these environment variables before launching the server:
@@ -43,6 +45,7 @@ Optional endpoint overrides:
 ```bash
 export EACH_API_BASE_URL="https://api.eachlabs.ai"
 export EACH_WORKFLOWS_BASE_URL="https://workflows.eachlabs.run/api/v1"
+export EACH_SENSE_BASE_URL="https://eachsense-agent.core.eachlabs.run"
 ```
 
 ## MCP Config
@@ -86,6 +89,7 @@ Catalog and schemas:
 
 - `search_each_labs`
 - `query_docs_filesystem_each_labs`
+- `eachlabs_submit_docs_feedback`
 - `eachlabs_search_models`
 - `eachlabs_get_model`
 - `eachlabs_get_model_request_schema` (supports `openapi=true` for the per-model OpenAPI schema)
@@ -102,6 +106,11 @@ Predictions and history:
 - `eachlabs_cancel_prediction`
 - `eachlabs_list_executions`
 
+Audio:
+
+- `eachlabs_audio_transcribe` (multipart upload, 25 MB maximum)
+- `eachlabs_audio_speech` (returns an inline MCP audio block)
+
 Storage:
 
 - `eachlabs_presign_upload`
@@ -113,7 +122,7 @@ Webhooks:
 - `eachlabs_list_webhooks`
 - `eachlabs_get_webhook`
 
-each::flags:
+Experimental each::flags (only registered with `EACHLABS_ENABLE_EXPERIMENTAL_FLAGS=1`):
 
 - `eachlabs_list_flags`
 - `eachlabs_get_flag`
@@ -168,10 +177,10 @@ For workflows, fetch or create the workflow, trigger it, then poll with `eachlab
 
 ## Notes
 
-The model list endpoint is public in the current API. Model details, predictions, webhooks, and workflows require `X-API-Key`; the LLM router uses `Authorization: Bearer`.
+The model list endpoint is public in the current API. Authenticated REST calls use `Authorization: Bearer`. The raw request tool retains an explicit `x-api-key` compatibility mode for legacy endpoints.
 
 The workflows API documents no `GET /workflows` list endpoint, so there is no list-workflows tool — use `eachlabs_get_workflow` with a known ID or slug, or `eachlabs_list_executions` to discover workflow IDs from past runs.
 
-The each::flags public docs were not yet visible in the docs index when this support was added, but the authenticated API surface appears under `/v1/flags`. Flags tools therefore expose `path` and `body` overrides so clients can adapt to the exact upstream contract without falling back to a fully raw request.
+The each::flags routes are not present in the current public OpenAPI/docs surface. They are therefore disabled by default and clearly experimental when enabled.
 
-All tools surface upstream API errors as structured tool errors (status plus the upstream payload), retry transparently on 429/transient 5xx, and time out individual HTTP requests after 60 seconds (5 minutes for chat and sense calls).
+All tools surface upstream API errors as structured tool errors (status plus the upstream payload). Safe read requests retry transient failures; dispatched writes are not retried after network ambiguity. Individual HTTP requests time out after 60 seconds (5 minutes for chat and sense calls).

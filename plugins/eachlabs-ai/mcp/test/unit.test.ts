@@ -11,6 +11,7 @@ import {
   validateAgainstSchema,
   trimModel,
   collectMediaUrls,
+  workflowTriggerPath,
 } from "../src/index.ts";
 
 test("joinUrl preserves base path prefixes", () => {
@@ -36,6 +37,17 @@ test("appendQuery adds defined params and skips empty ones", () => {
     "/v1/models?name=flux&limit=25&offset=0",
   );
   assert.equal(appendQuery("/v1/models", {}), "/v1/models");
+});
+
+test("workflowTriggerPath encodes identifiers and selects bulk route", () => {
+  assert.equal(
+    workflowTriggerPath("workflow/id", "version 1"),
+    "/v1/workflows/trigger/workflow%2Fid/version%201",
+  );
+  assert.equal(
+    workflowTriggerPath("wf", "v1", true),
+    "/v1/workflows/bulk-trigger/wf/v1",
+  );
 });
 
 test("flagPath resolves each::flags key placeholders", () => {
@@ -111,11 +123,49 @@ test("validateAgainstSchema flags missing required, type and enum violations", (
   const bad = validateAgainstSchema(SCHEMA, { aspect_ratio: "4:3", steps: 1.5, unknown_field: 1 });
   assert.equal(bad.valid, false);
   const messages = bad.errors.map((error) => `${error.field}:${error.message}`);
-  assert.ok(messages.some((entry) => entry.startsWith("prompt:Required")));
-  assert.ok(messages.some((entry) => entry.startsWith("aspect_ratio:Field is not one of")));
-  assert.ok(messages.some((entry) => entry.startsWith("steps:Field must be an integer")));
+  assert.ok(messages.some((entry) => entry.startsWith("prompt:must have required property")));
+  assert.ok(messages.some((entry) => entry.startsWith("aspect_ratio:must be equal to one of")));
+  assert.ok(messages.some((entry) => entry.startsWith("steps:must be integer")));
   assert.equal(bad.warnings.length, 1);
   assert.equal(bad.warnings[0].field, "unknown_field");
+});
+
+test("validateAgainstSchema enforces nested and numeric constraints", () => {
+  const schema = {
+    type: "object",
+    required: ["settings"],
+    properties: {
+      settings: {
+        type: "object",
+        required: ["steps"],
+        properties: {
+          steps: { type: "integer", minimum: 2, maximum: 8 },
+        },
+      },
+    },
+  };
+  const bad = validateAgainstSchema(schema, { settings: { steps: 10 } });
+  assert.equal(bad.valid, false);
+  assert.equal(bad.errors[0]?.field, "settings.steps");
+});
+
+test("generateExampleInput recursively fills required nested fields", () => {
+  const input = generateExampleInput(
+    {
+      type: "object",
+      required: ["settings"],
+      properties: {
+        settings: {
+          type: "object",
+          required: ["count"],
+          properties: { count: { type: "integer", minimum: 3 } },
+        },
+      },
+    },
+    false,
+    {},
+  );
+  assert.deepEqual(input, { settings: { count: 3 } });
 });
 
 test("validateAgainstSchema accepts valid input", () => {

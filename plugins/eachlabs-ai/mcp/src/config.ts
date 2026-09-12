@@ -20,7 +20,7 @@ export const EACH_DOCS_MCP_URL =
   process.env.EACH_DOCS_MCP_URL ?? "https://docs.eachlabs.ai/mcp";
 
 export const EACH_API_KEY =
-  process.env.EACH_API_KEY ?? process.env.EACHLABS_API_KEY;
+  process.env.EACH_API_KEY?.trim() || process.env.EACHLABS_API_KEY?.trim() || undefined;
 
 export const DEFAULT_TIMEOUT_MS = 60_000;
 export const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -37,7 +37,7 @@ export const ENABLE_EXPERIMENTAL_FLAGS =
 export const UPDATE_CHECK_URL =
   "https://raw.githubusercontent.com/bulbulogludemir/eachlabs-ai-plugin/main/plugins/eachlabs-ai/mcp/package.json";
 
-export const SERVER_VERSION = "0.5.0";
+export const SERVER_VERSION = "0.5.1";
 
 // The prediction detail reference still documents `failed`, while the July 7
 // changelog and execution history reference use `error`. Treat both as

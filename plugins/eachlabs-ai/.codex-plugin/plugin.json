@@ -1,6 +1,6 @@
 {
   "name": "eachlabs-ai",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Build with each::labs generative media APIs, workflows, each::sense, and the official docs MCP.",
   "author": {
     "name": "Eachlabs",

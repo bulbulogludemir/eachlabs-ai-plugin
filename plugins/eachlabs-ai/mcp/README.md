@@ -45,7 +45,7 @@ Set one of these environment variables before launching the server:
 export EACH_API_KEY="your-eachlabs-api-key"
 ```
 
-`EACHLABS_API_KEY` is also accepted.
+`EACHLABS_API_KEY` is also accepted. Blank values are ignored; a non-empty `EACH_API_KEY` takes precedence.
 
 Optional endpoint overrides:
 
@@ -64,7 +64,7 @@ Use the built server with any MCP client that supports stdio:
   "mcpServers": {
     "eachlabs": {
       "command": "node",
-      "args": ["/Users/demir/Projects/eachlabs-mcp/dist/index.js"],
+      "args": ["/absolute/path/to/eachlabs-ai-plugin/plugins/eachlabs-ai/mcp/dist/index.js"],
       "env": {
         "EACH_API_KEY": "your-eachlabs-api-key"
       }
@@ -81,7 +81,7 @@ For local development:
     "eachlabs-dev": {
       "command": "npm",
       "args": ["run", "dev"],
-      "cwd": "/Users/demir/Projects/eachlabs-mcp",
+      "cwd": "/absolute/path/to/eachlabs-ai-plugin/plugins/eachlabs-ai/mcp",
       "env": {
         "EACH_API_KEY": "your-eachlabs-api-key"
       }

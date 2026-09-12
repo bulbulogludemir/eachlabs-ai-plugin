@@ -2,6 +2,12 @@
 
 Open source Codex and Claude Code plugin for each::labs generative media APIs.
 
+[![CI](https://github.com/bulbulogludemir/eachlabs-ai-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/bulbulogludemir/eachlabs-ai-plugin/actions/workflows/ci.yml)
+
+Maintained by [Demir Bülbüloğlu](https://github.com/bulbulogludemir), under the [MIT license](LICENSE). The bundled MCP server is an unofficial integration with each::labs.
+
+Requires Node.js 20 or newer. Model discovery and schema inspection work without an API key; generation and account operations use your own each::labs account and may incur provider charges.
+
 Give this repository to Codex or Claude Code and ask it to install the plugin. The repo contains both marketplace formats, so agents can detect the right installer for their runtime.
 
 The plugin bundles a single `eachlabs` MCP server with:
@@ -74,6 +80,18 @@ claude plugin install eachlabs-ai@eachlabs-ai
 
 Claude Code prompts for the API key through plugin user configuration. You can leave it empty for docs/model-listing-only workflows and configure it later for account actions.
 
+If you configure credentials through the environment instead, use `EACHLABS_API_KEY` when leaving the Claude plugin key empty. A non-empty plugin key takes precedence.
+
+## Try It Without Generating Media
+
+After installation, ask your agent:
+
+- "Find image models with image-to-image support and compare their input schemas. Do not run predictions."
+- "Validate this workflow definition in structural mode without calling upstream services."
+- "Compare these two workflow definitions and explain which inputs or model steps changed."
+
+Catalog requests need network access. Structural workflow validation and workflow diffs run locally. The [MCP reference](plugins/eachlabs-ai/mcp/README.md) lists the available tools.
+
 ## What You Get
 
 - One bundled `eachlabs` MCP server
@@ -126,3 +144,7 @@ python3 plugins/eachlabs-ai/scripts/smoke_eachlabs.py
 ```
 
 This checks the public each::labs model listing endpoint and does not require an API key.
+
+## Contributing And Support
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for reproducible local checks and bug-report guidance. Report problems through [GitHub Issues](https://github.com/bulbulogludemir/eachlabs-ai-plugin/issues). See [CHANGELOG.md](CHANGELOG.md) for maintenance changes.
